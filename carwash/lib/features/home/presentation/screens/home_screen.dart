@@ -2,6 +2,7 @@ import 'package:carwash/features/auth/presentation/providers/auth_provider.dart'
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -10,69 +11,143 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
+    final theme = Theme.of(context);
+
+    // Modern Color Palette
+    final cardColors = [
+      const Color(0xFF4ADE80), // Green for Ingreso (Softer, vibrant)
+      const Color(0xFFF87171), // Red for Finalizar (Softer)
+      const Color(0xFF60A5FA), // Blue for New Vehicle
+      const Color(0xFFFBBF24), // Amber for Branches
+      const Color(0xFFA78BFA), // Purple for Users
+      const Color(0xFF2DD4BF), // Teal for Balance
+    ];
 
     return Scaffold(
+      backgroundColor: Colors.grey[50], // Very light grey/white background
       appBar: AppBar(
-        title: Text('Hola, ${user?.name ?? 'Usuario'}'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: false,
+        title: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (authProvider.companyName != null)
+                    Text(
+                      authProvider.companyName!.toUpperCase(),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                        fontSize: 18,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (authProvider.branchName != null)
+                    Text(
+                      authProvider.branchName!,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.person_outline_rounded,
+                    size: 16,
+                    color: Colors.grey[700],
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    user?.name.split(' ').first.toUpperCase() ?? 'USUARIO',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              context.read<AuthProvider>().logout();
-              context.go('/login');
-            },
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.logout_rounded, size: 20),
+              color: Colors.red[400],
+              tooltip: 'Cerrar Sesión',
+              onPressed: () {
+                context.read<AuthProvider>().logout();
+                context.go('/login');
+              },
+            ),
           ),
         ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+        child: GridView.count(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 1.0, // Square cards
           children: [
-            Expanded(
-              child: GridView.count(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                children: [
-                  _DashboardCard(
-                    title: 'Ingreso Vehículo',
-                    icon: Icons.directions_car, // Coche llegando
-                    color: Colors.green.shade500,
-                    onTap: () {},
-                  ),
-                  _DashboardCard(
-                    title: 'Finalizar Lavado',
-                    icon:
-                        Icons.check_circle_outline, // Confirmación de terminado
-                    color: Colors.red.shade500,
-                    onTap: () {},
-                  ),
-                  _DashboardCard(
-                    title: '+ Vehículo',
-                    icon: Icons.add_circle_outline,
-                    color: Colors.blue.shade400,
-                    onTap: () {},
-                  ),
-                  _DashboardCard(
-                    title: 'Sucursales',
-                    icon: Icons.store_mall_directory,
-                    color: Colors.orange.shade400,
-                    onTap: () {},
-                  ),
-                  _DashboardCard(
-                    title: 'Usuarios',
-                    icon: Icons.people,
-                    color: Colors.purple.shade400,
-                    onTap: () {},
-                  ),
-                  _DashboardCard(
-                    title: 'Balance',
-                    icon: Icons.account_balance_wallet,
-                    color: Colors.teal.shade400,
-                    onTap: () {},
-                  ),
-                ],
-              ),
+            _DashboardCard(
+              title: 'Vehículos\nActivos',
+              icon: Icons.local_car_wash_rounded,
+              color: cardColors[0],
+              onTap: () => context.push('/active-vehicles'),
+              isPrimary: true,
+            ),
+            _DashboardCard(
+              title: 'Finalizar\nLavado',
+              icon: Icons.check_circle_rounded,
+              color: cardColors[1],
+              onTap: () => context.push('/billing-list'),
+            ),
+            _DashboardCard(
+              title: 'Ingreso\nVehículo',
+              icon: Icons.add_circle_rounded,
+              color: cardColors[2],
+              onTap: () => context.push('/vehicle-entry'),
+            ),
+            _DashboardCard(
+              title: 'Sucursales',
+              icon: Icons.store_rounded,
+              color: cardColors[3],
+              onTap: () => context.push('/branch-list'),
+            ),
+            _DashboardCard(
+              title: 'Usuarios',
+              icon: Icons.people_alt_rounded,
+              color: cardColors[4],
+              onTap: () => context.push('/user-list'),
+            ),
+            _DashboardCard(
+              title: 'Balance',
+              icon: Icons.account_balance_wallet_rounded,
+              color: cardColors[5],
+              onTap: () => context.push('/balance'),
             ),
           ],
         ),
@@ -86,42 +161,85 @@ class _DashboardCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
+  final bool isPrimary;
 
   const _DashboardCard({
     required this.title,
     required this.icon,
     required this.color,
     required this.onTap,
+    this.isPrimary = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            color: color,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.4),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [color.withOpacity(0.8), color],
+              colors: [color, color.withOpacity(0.8)],
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
             children: [
-              Icon(icon, size: 48, color: Colors.white),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+              // Decorative circle in background
+              Positioned(
+                right: -20,
+                top: -20,
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.center,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(icon, size: 32, color: Colors.white),
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
               ),
             ],
