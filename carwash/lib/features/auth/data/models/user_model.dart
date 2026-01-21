@@ -8,6 +8,7 @@ class UserModel extends UserEntity {
     required super.companyId,
     required super.role,
     required super.name,
+    super.branchId,
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -15,18 +16,20 @@ class UserModel extends UserEntity {
     return UserModel(
       id: doc.id,
       email: data['email'] ?? '',
-      companyId: data['company_id'] ?? '',
-      role: data['role'] ?? 'employee',
-      name: data['name'] ?? '',
+      companyId: data['empresa_id'] ?? '',
+      role: data['rol'] ?? 'user',
+      name: data['nombre'] ?? '',
+      branchId: data['sucursal_id'],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'email': email,
-      'company_id': companyId,
-      'role': role,
-      'name': name,
+      'empresa_id': companyId,
+      'rol': role,
+      'nombre': name,
+      'sucursal_id': branchId,
     };
   }
 }

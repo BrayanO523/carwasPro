@@ -1,3 +1,5 @@
+import 'package:carwash/features/branch/data/models/branch_model.dart';
+import 'package:carwash/features/branch/domain/repositories/branch_repository.dart';
 import 'package:carwash/features/auth/domain/repositories/auth_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -7,6 +9,7 @@ import '../../data/models/company_model.dart';
 class CompanyRegistrationProvider extends ChangeNotifier {
   final CompanyRepository _companyRepository;
   final AuthRepository _authRepository;
+  final BranchRepository _branchRepository;
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -25,8 +28,10 @@ class CompanyRegistrationProvider extends ChangeNotifier {
   CompanyRegistrationProvider({
     required CompanyRepository companyRepository,
     required AuthRepository authRepository,
+    required BranchRepository branchRepository,
   }) : _companyRepository = companyRepository,
-       _authRepository = authRepository;
+       _authRepository = authRepository,
+       _branchRepository = branchRepository;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -54,13 +59,25 @@ class CompanyRegistrationProvider extends ChangeNotifier {
       // 3. Save Company to Firestore
       await _companyRepository.registerCompany(newCompany);
 
-      // 4. Create Admin User linked to this Company
+      // 3b. Create Main Branch
+      final mainBranchId = const Uuid().v4();
+      final mainBranch = BranchModel(
+        id: mainBranchId,
+        name: 'Sucursal Principal',
+        address: addressController.text.trim(),
+        phone: phoneController.text.trim(),
+        companyId: companyId,
+      );
+      await _branchRepository.createBranch(mainBranch);
+
+      // 4. Create Admin User linked to this Company and Main Branch
       await _authRepository.createCompanyUser(
         email: adminEmailController.text.trim(),
         password: adminPasswordController.text.trim(),
         companyId: companyId,
         name: adminNameController.text.trim(),
         role: 'admin',
+        branchId: mainBranchId, // Assign admin to main branch
       );
 
       _isLoading = false;

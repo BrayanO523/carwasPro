@@ -10,5 +10,14 @@ abstract class AuthRepository {
     required String companyId,
     required String name,
     required String role,
+    String? branchId,
   });
+
+  Future<void> updateUser({
+    required String userId,
+    required String name,
+    String? branchId,
+  });
+
+  Future<void> deleteUser(String userId);
 }

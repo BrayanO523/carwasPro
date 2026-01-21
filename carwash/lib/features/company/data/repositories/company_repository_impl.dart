@@ -13,14 +13,14 @@ class CompanyRepositoryImpl implements CompanyRepository {
   Future<void> registerCompany(Company company) async {
     // We use the company ID as the document ID
     await _firestore
-        .collection('companies')
+        .collection('empresas')
         .doc(company.id)
         .set((company as CompanyModel).toMap());
   }
 
   @override
   Future<Company?> getCompany(String id) async {
-    final doc = await _firestore.collection('companies').doc(id).get();
+    final doc = await _firestore.collection('empresas').doc(id).get();
     if (doc.exists) {
       return CompanyModel.fromFirestore(doc);
     }

@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -18,7 +19,7 @@ class AuthRepositoryImpl implements AuthRepository {
       if (user == null) return null;
       try {
         final userDoc = await _firestore
-            .collection('users')
+            .collection('usuarios')
             .doc(user.uid)
             .get();
         if (userDoc.exists) {
@@ -40,7 +41,7 @@ class AuthRepositoryImpl implements AuthRepository {
       );
       if (credential.user != null) {
         final userDoc = await _firestore
-            .collection('users')
+            .collection('usuarios')
             .doc(credential.user!.uid)
             .get();
         if (userDoc.exists) {
@@ -59,39 +60,76 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  @override
   Future<UserEntity> createCompanyUser({
     required String email,
     required String password,
     required String companyId,
     required String name,
     required String role,
+    String? branchId,
   }) async {
-    // 1. Create user in Firebase Auth
-    final credential = await _firebaseAuth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    FirebaseApp? secondaryApp;
+    try {
+      // 1. Create a secondary Firebase App instance to avoid logging out the current user
+      secondaryApp = await Firebase.initializeApp(
+        name: 'secondaryApp',
+        options: Firebase.app().options,
+      );
 
-    if (credential.user == null) {
-      throw Exception('Failed to create user in Firebase Auth');
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      // 2. Create user in Firebase Auth using the secondary app
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (credential.user == null) {
+        throw Exception('Failed to create user in Firebase Auth');
+      }
+
+      final uid = credential.user!.uid;
+
+      // 3. Create user model
+      final newUser = UserModel(
+        id: uid,
+        email: email,
+        companyId: companyId,
+        role: role,
+        name: name,
+        branchId: branchId,
+      );
+
+      // 4. Create user document in Firestore 'usuarios' collection
+      // Ensure we use the main firestore instance, not one attached to secondary app implicitly
+      await _firestore.collection('usuarios').doc(uid).set(newUser.toMap());
+
+      await secondaryAuth.signOut();
+      return newUser;
+    } catch (e) {
+      rethrow;
+    } finally {
+      // 5. Clean up secondary app
+      await secondaryApp?.delete();
     }
+  }
 
-    final uid = credential.user!.uid;
+  @override
+  Future<void> updateUser({
+    required String userId,
+    required String name,
+    String? branchId,
+  }) async {
+    final updates = <String, dynamic>{'nombre': name, 'sucursal_id': branchId};
+    await _firestore.collection('usuarios').doc(userId).update(updates);
+  }
 
-    final newUser = UserModel(
-      id: uid,
-      email: email,
-      companyId: companyId,
-      role: role,
-      name: name,
-    );
-
-    // 2. Create user document in Firestore 'users' collection
-    await _firestore.collection('users').doc(uid).set(newUser.toMap());
-
-    // 3. (Optional) Add reference in company's users subcollection if needed
-    // But requirement says "coleccion de clientes,usuarios,empresa" - assuming top level 'users'.
-
-    return newUser;
+  @override
+  Future<void> deleteUser(String userId) async {
+    // Note: This only deletes the Firestore document.
+    // Deleting the Auth user requires Admin SDK or Cloud Functions in a real production app.
+    // For this prototype, removing from Firestore is sufficient to hide them from the app.
+    await _firestore.collection('usuarios').doc(userId).delete();
   }
 }

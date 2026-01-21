@@ -1,38 +1,32 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../domain/entities/company.dart';
+import '../../domain/entities/branch.dart';
 
-class CompanyModel extends Company {
-  CompanyModel({
+class BranchModel extends Branch {
+  BranchModel({
     required super.id,
     required super.name,
-    required super.rtn,
     required super.address,
     required super.phone,
-    required super.email,
-    required super.createdAt,
+    required super.companyId,
   });
 
-  factory CompanyModel.fromFirestore(DocumentSnapshot doc) {
+  factory BranchModel.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-    return CompanyModel(
+    return BranchModel(
       id: doc.id,
       name: data['nombre'] ?? '',
-      rtn: data['rtn'] ?? '',
       address: data['direccion'] ?? '',
       phone: data['telefono'] ?? '',
-      email: data['email'] ?? '',
-      createdAt: (data['creado_en'] as Timestamp).toDate(),
+      companyId: data['empresa_id'] ?? '',
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'nombre': name,
-      'rtn': rtn,
       'direccion': address,
       'telefono': phone,
-      'email': email,
-      'creado_en': Timestamp.fromDate(createdAt),
+      'empresa_id': companyId,
     };
   }
 }

@@ -4,6 +4,7 @@ class UserEntity {
   final String companyId;
   final String role; // 'admin', 'employee'
   final String name;
+  final String? branchId;
 
   UserEntity({
     required this.id,
@@ -11,5 +12,6 @@ class UserEntity {
     required this.companyId,
     required this.role,
     required this.name,
+    this.branchId,
   });
 }
