@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../providers/active_vehicles_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/vehicle.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' as import_firestore;
 
 class ActiveVehiclesScreen extends StatefulWidget {
   const ActiveVehiclesScreen({super.key});
@@ -480,35 +479,13 @@ class _ServiceChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<import_firestore.DocumentSnapshot>(
-      future: import_firestore.FirebaseFirestore.instance
-          .collection('tiposLavados')
-          .doc(serviceId)
-          .get(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Chip(
-            label: SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          );
-        }
+    final provider = context.watch<ActiveVehiclesProvider>();
+    final name = provider.getServiceName(serviceId);
 
-        final data = snapshot.data!.data() as Map<String, dynamic>?;
-        final name = data?['nombre'] ?? 'Desconocido';
-        final description = data?['descripcion'] ?? '';
-
-        return Tooltip(
-          message: description,
-          child: Chip(
-            label: Text(name),
-            backgroundColor: Colors.purple[50],
-            labelStyle: TextStyle(color: Colors.purple[900]),
-          ),
-        );
-      },
+    return Chip(
+      label: Text(name),
+      backgroundColor: Colors.purple[50],
+      labelStyle: TextStyle(color: Colors.purple[900]),
     );
   }
 }

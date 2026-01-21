@@ -18,4 +18,5 @@ abstract class VehicleEntryRepository {
   Stream<List<Vehicle>> getVehiclesStream(String companyId);
 
   Future<void> updateVehicleStatus(String vehicleId, String status);
+  Future<Map<String, String>> getServiceIdsToNames();
 }

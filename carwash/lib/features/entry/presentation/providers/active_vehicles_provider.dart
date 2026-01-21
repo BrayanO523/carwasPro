@@ -35,6 +35,8 @@ class ActiveVehiclesProvider extends ChangeNotifier {
           (vehicles) {
             _allVehicles = vehicles;
             _isLoading = false;
+            // Load service names when vehicles are loaded
+            _loadServiceNames();
             notifyListeners();
           },
           onError: (error) {
@@ -43,6 +45,17 @@ class ActiveVehiclesProvider extends ChangeNotifier {
             notifyListeners();
           },
         );
+  }
+
+  Map<String, String> _serviceNames = {};
+
+  Future<void> _loadServiceNames() async {
+    _serviceNames = await _repository.getServiceIdsToNames();
+    notifyListeners();
+  }
+
+  String getServiceName(String serviceId) {
+    return _serviceNames[serviceId] ?? 'Cargando...';
   }
 
   void setSearchText(String text) {

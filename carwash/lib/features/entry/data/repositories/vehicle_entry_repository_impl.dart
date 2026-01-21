@@ -123,4 +123,22 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
       'estado': status,
     });
   }
+
+  @override
+  Future<Map<String, String>> getServiceIdsToNames() async {
+    try {
+      final snapshot = await _firestore.collection('tiposLavados').get();
+      final map = <String, String>{};
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        if (data.containsKey('nombre')) {
+          map[doc.id] = data['nombre'] as String;
+        }
+      }
+      return map;
+    } catch (e) {
+      print('Error fetching wash types: $e');
+      return {};
+    }
+  }
 }
