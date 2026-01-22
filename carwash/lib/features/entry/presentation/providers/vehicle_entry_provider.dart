@@ -1,15 +1,17 @@
+import 'dart:async';
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'; // Restored
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../domain/repositories/vehicle_entry_repository.dart';
+import '../../../wash_types/domain/repositories/wash_type_repository.dart'; // Correct relative path from features/entry/presentation/providers/
 import '../../domain/entities/vehicle.dart';
 import '../../data/models/client_model.dart';
 import '../../data/models/vehicle_model.dart';
 
 class VehicleEntryProvider extends ChangeNotifier {
   final VehicleEntryRepository _repository;
+  final WashTypeRepository _washTypeRepository;
 
   // Form Controllers
   final nameController = TextEditingController();
@@ -29,10 +31,12 @@ class VehicleEntryProvider extends ChangeNotifier {
 
   final List<String> vehicleTypes = ['moto', 'turismo', 'camioneta', 'grande'];
 
-  VehicleEntryProvider({required VehicleEntryRepository repository})
-    : _repository = repository {
-    _loadWashTypes();
-  }
+  VehicleEntryProvider({
+    required VehicleEntryRepository repository,
+    required WashTypeRepository washTypeRepository,
+  }) : _repository = repository,
+       _washTypeRepository = washTypeRepository;
+  // _loadWashTypes(); // Now called explicitly from UI
 
   List<File> get selectedImages => _selectedImages;
   bool get isLoading => _isLoading;
@@ -42,30 +46,63 @@ class VehicleEntryProvider extends ChangeNotifier {
   String? get selectedBaseServiceId => _selectedBaseServiceId;
   Set<String> get selectedExtrasIds => _selectedExtrasIds;
 
-  Future<void> _loadWashTypes() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('tiposLavados')
-          .where('activo', isEqualTo: true)
-          .get();
-      _washTypes = snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
+  StreamSubscription? _washTypeSubscription;
 
-      // Select first base service by default if available
-      final baseServices = _washTypes
-          .where((w) => w['categoria'] == 'base')
-          .toList();
-      if (baseServices.isNotEmpty) {
-        _selectedBaseServiceId = baseServices.first['id'];
-      }
+  // Subscribe to wash types for Real-time updates
+  void subscribeToWashTypes(String companyId, String branchId) {
+    // Cancel previous subscription if any
+    _washTypeSubscription?.cancel();
 
-      notifyListeners();
-    } catch (e) {
-      print('Error loading wash types: $e');
-    }
+    _washTypeSubscription = _washTypeRepository
+        .getWashTypesStream(companyId: companyId)
+        .listen(
+          (allTypes) {
+            // 2. Filter by Active and Branch Availability
+            final filtered = allTypes.where((type) {
+              if (!type.isActive) return false;
+
+              // Branch Check: Empty = All. Or must contain current branchId.
+              if (type.branchIds.isEmpty) return true;
+              return type.branchIds.contains(branchId);
+            }).toList();
+
+            // 3. Convert to Map for current UI compatibility
+            _washTypes = filtered.map((e) {
+              return {
+                'id': e.id,
+                'nombre': e.name,
+                'descripcion': e.description,
+                'categoria': e.category,
+                'activo': e.isActive,
+                'precios': e.prices,
+                'empresa_id': e.companyId,
+                'sucursal_ids': e.branchIds,
+              };
+            }).toList();
+
+            // Select first base service by default if available and nothing selected
+            final baseServices = _washTypes
+                .where((w) => w['categoria'] == 'base')
+                .toList();
+
+            // Ensure current selection is still valid, else reset
+            if (_selectedBaseServiceId == null ||
+                !baseServices.any((x) => x['id'] == _selectedBaseServiceId)) {
+              if (baseServices.isNotEmpty) {
+                _selectedBaseServiceId = baseServices.first['id'];
+              } else {
+                _selectedBaseServiceId = null;
+              }
+            }
+
+            notifyListeners();
+          },
+          onError: (e) {
+            print('Error loading wash types stream: $e');
+            _errorMessage = 'Error de conexión con servicios: $e';
+            notifyListeners();
+          },
+        );
   }
 
   void setVehicleType(String type) {
@@ -103,7 +140,7 @@ class VehicleEntryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> submitEntry(String companyId) async {
+  Future<bool> submitEntry(String companyId, {String? branchId}) async {
     if (nameController.text.isEmpty ||
         lastNameController.text.isEmpty ||
         modelController.text.isEmpty ||
@@ -153,7 +190,7 @@ class VehicleEntryProvider extends ChangeNotifier {
       await _repository.saveClient(client);
 
       final vehicleId = const Uuid().v4();
-      final branchId = 'main'; // TODO: Get from user/auth
+      final effectiveBranchId = branchId ?? 'main';
 
       // 3. Upload Images
       List<String> photoUrls = [];
@@ -161,7 +198,7 @@ class VehicleEntryProvider extends ChangeNotifier {
         final url = await _repository.uploadVehicleImage(
           imageFile: image,
           companyId: companyId,
-          branchId: branchId,
+          branchId: effectiveBranchId,
           clientId: clientId,
           vehicleId: vehicleId,
         );
@@ -183,6 +220,7 @@ class VehicleEntryProvider extends ChangeNotifier {
         entryDate: DateTime.now(),
         photoUrls: photoUrls,
         status: Vehicle.statusWashing, // Use constant
+        branchId: effectiveBranchId,
         clientName: '${client.name} ${client.lastName}', // Use client object
         vehicleType: _selectedVehicleType,
         services: selectedServices,
@@ -236,6 +274,7 @@ class VehicleEntryProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _washTypeSubscription?.cancel();
     nameController.dispose();
     lastNameController.dispose();
     phoneController.dispose();

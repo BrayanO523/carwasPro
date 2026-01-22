@@ -20,11 +20,18 @@ class UserManagementProvider extends ChangeNotifier {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   String? _selectedBranchId; // Made private
+  String _selectedRole = 'user'; // Default to user (employee)
 
   String? get selectedBranchId => _selectedBranchId;
+  String get selectedRole => _selectedRole;
 
   void setSelectedBranch(String? value) {
     _selectedBranchId = value;
+    notifyListeners();
+  }
+
+  void setSelectedRole(String value) {
+    _selectedRole = value;
     notifyListeners();
   }
 
@@ -39,7 +46,19 @@ class UserManagementProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  Future<void> loadConfig(String companyId) async {
+  // Cache State
+  String? _lastConfigCompanyId;
+
+  Future<void> loadConfig(String companyId, {bool force = false}) async {
+    // Cache Check
+    if (!force &&
+        companyId == _lastConfigCompanyId &&
+        _users.isNotEmpty &&
+        _branches.isNotEmpty) {
+      return;
+    }
+    _lastConfigCompanyId = companyId;
+
     _isLoading = true;
     notifyListeners();
     try {
@@ -106,7 +125,7 @@ class UserManagementProvider extends ChangeNotifier {
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
         name: nameController.text.trim(),
-        role: 'user', // Employee role
+        role: _selectedRole,
         companyId: companyId,
         branchId: selectedBranchId,
       );
@@ -179,6 +198,7 @@ class UserManagementProvider extends ChangeNotifier {
     emailController.clear();
     passwordController.clear();
     _selectedBranchId = null;
+    _selectedRole = 'user';
     notifyListeners();
   }
 }

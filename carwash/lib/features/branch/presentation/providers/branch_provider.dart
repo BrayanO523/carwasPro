@@ -18,7 +18,14 @@ class BranchProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  Future<void> loadBranches(String companyId) async {
+  // Cache State
+  String? _lastCompanyId;
+
+  Future<void> loadBranches(String companyId, {bool force = false}) async {
+    // Cache check
+    if (!force && companyId == _lastCompanyId && _branches.isNotEmpty) return;
+    _lastCompanyId = companyId;
+
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();

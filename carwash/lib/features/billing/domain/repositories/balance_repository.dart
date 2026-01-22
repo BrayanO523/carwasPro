@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../entities/invoice.dart';
 import '../../data/models/invoice_model.dart';
+import '../../data/models/fiscal_config_model.dart';
+import '../entities/fiscal_config.dart';
 
 abstract class BalanceRepository {
   Future<void> saveInvoice(Invoice invoice);
@@ -9,6 +11,8 @@ abstract class BalanceRepository {
     DateTime? startDate,
     DateTime? endDate,
   });
+  Future<FiscalConfig?> getFiscalConfig(String companyId, String? branchId);
+  Future<void> saveFiscalConfig(FiscalConfig config);
 }
 
 class BalanceRepositoryImpl implements BalanceRepository {
@@ -81,5 +85,55 @@ class BalanceRepositoryImpl implements BalanceRepository {
 
     final snapshot = await query.get();
     return snapshot.docs.map((doc) => InvoiceModel.fromFirestore(doc)).toList();
+  }
+
+  @override
+  Future<FiscalConfig?> getFiscalConfig(
+    String companyId,
+    String? branchId,
+  ) async {
+    Query query = _firestore
+        .collection('facturacion')
+        .where('empresa_id', isEqualTo: companyId);
+
+    if (branchId != null) {
+      query = query.where('sucursal_id', isEqualTo: branchId);
+    }
+
+    final snapshot = await query.limit(1).get();
+
+    if (snapshot.docs.isNotEmpty) {
+      return FiscalConfigModel.fromFirestore(snapshot.docs.first);
+    }
+    return null;
+  }
+
+  @override
+  Future<void> saveFiscalConfig(FiscalConfig config) async {
+    final model = config is FiscalConfigModel
+        ? config
+        : FiscalConfigModel(
+            id: config.id,
+            companyId: config.companyId,
+            branchId: config.branchId,
+            cai: config.cai,
+            rtn: config.rtn,
+            rangeMin: config.rangeMin,
+            rangeMax: config.rangeMax,
+            currentSequence: config.currentSequence,
+            deadline: config.deadline,
+            email: config.email,
+            phone: config.phone,
+            address: config.address,
+          );
+
+    if (config.id.isEmpty) {
+      await _firestore.collection('facturacion').add(model.toMap());
+    } else {
+      await _firestore
+          .collection('facturacion')
+          .doc(config.id)
+          .set(model.toMap());
+    }
   }
 }

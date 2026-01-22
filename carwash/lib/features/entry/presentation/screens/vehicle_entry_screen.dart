@@ -16,6 +16,19 @@ class VehicleEntryScreen extends StatelessWidget {
     // Get companyId from AuthProvider
     final authProvider = context.read<AuthProvider>();
     final companyId = authProvider.currentUser?.companyId;
+    final branchId = authProvider.currentUser?.branchId; // Get branchId
+
+    // Load Wash Types on Init
+    // Ideally use State.initState but StatelessWidget needs PostFrameCallback or SideEffect
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (companyId != null) {
+        // Pass branchId (or empty if none, but ideally user has one)
+        context.read<VehicleEntryProvider>().subscribeToWashTypes(
+          companyId,
+          branchId ?? '',
+        );
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -321,7 +334,13 @@ class VehicleEntryScreen extends StatelessWidget {
                           );
                           return;
                         }
-                        final success = await provider.submitEntry(companyId);
+                        final currentUser = context
+                            .read<AuthProvider>()
+                            .currentUser;
+                        final success = await provider.submitEntry(
+                          companyId,
+                          branchId: currentUser?.branchId,
+                        );
                         if (success && context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(

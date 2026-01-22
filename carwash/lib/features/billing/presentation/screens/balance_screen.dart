@@ -95,28 +95,83 @@ class _BalanceScreenState extends State<BalanceScreen>
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.date_range),
-                tooltip: 'Filtrar por Fecha',
-                onPressed: () async {
-                  final picked = await showDateRangePicker(
-                    context: context,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime(2030),
-                    initialDateRange: _dateRange,
-                  );
-                  if (picked != null) {
-                    setState(() {
-                      _dateRange = picked;
-                    });
-                    _loadData();
-                  }
-                },
+              // Filter Buttons
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.calendar_today_outlined, size: 20),
+                    tooltip: 'Desde',
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _dateRange?.start ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          final end = _dateRange?.end ?? DateTime.now();
+                          // Ensure start is before end
+                          if (picked.isAfter(end)) {
+                            _dateRange = DateTimeRange(
+                              start: picked,
+                              end: picked,
+                            );
+                          } else {
+                            _dateRange = DateTimeRange(start: picked, end: end);
+                          }
+                        });
+                        _loadData();
+                      }
+                    },
+                  ),
+                  if (_dateRange?.start != null)
+                    Text(
+                      DateFormat('dd/MM').format(_dateRange!.start),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  const Text(' - '),
+                  IconButton(
+                    icon: const Icon(Icons.event_available_outlined, size: 20),
+                    tooltip: 'Hasta',
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _dateRange?.end ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          final start = _dateRange?.start ?? DateTime.now();
+                          // Ensure end is after start
+                          if (picked.isBefore(start)) {
+                            _dateRange = DateTimeRange(
+                              start: picked,
+                              end: picked,
+                            );
+                          } else {
+                            _dateRange = DateTimeRange(
+                              start: start,
+                              end: picked,
+                            );
+                          }
+                        });
+                        _loadData();
+                      }
+                    },
+                  ),
+                  if (_dateRange?.end != null)
+                    Text(
+                      DateFormat('dd/MM').format(_dateRange!.end),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                ],
               ),
               if (_dateRange != null)
                 IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: 'Limpiar Filtro de Fecha',
+                  icon: const Icon(Icons.clear, color: Colors.red),
+                  tooltip: 'Limpiar Filtro',
                   onPressed: () {
                     setState(() => _dateRange = null);
                     _loadData();
@@ -127,45 +182,59 @@ class _BalanceScreenState extends State<BalanceScreen>
         ),
         if (balanceProvider.isLoading)
           const Expanded(child: Center(child: CircularProgressIndicator()))
-        else if (invoices.isEmpty)
-          const Expanded(
-            child: Center(child: Text('No hay facturas registradas.')),
-          )
         else
           Expanded(
-            child: ListView.builder(
-              itemCount: invoices.length,
-              itemBuilder: (context, index) {
-                final invoice = invoices[index];
-                return ListTile(
-                  leading: Icon(
-                    invoice.documentType == 'invoice'
-                        ? Icons.receipt_long
-                        : Icons.receipt,
-                    color: invoice.documentType == 'invoice'
-                        ? Colors.blue
-                        : Colors.orange,
-                  ),
-                  title: Text(
-                    invoice.clientName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    '${invoice.documentType == 'invoice' ? 'FAC' : 'REC'} #${invoice.invoiceNumber} • ${DateFormat('dd/MM/yyyy HH:mm').format(invoice.createdAt)}',
-                  ),
-                  trailing: Text(
-                    'L. ${invoice.totalAmount.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green[700],
-                      fontSize: 15,
-                    ),
-                  ),
-                  onTap: () {
-                    // TODO: Show Detail / Reprint PDF
-                  },
-                );
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await _loadData();
               },
+              child: invoices.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.5,
+                          child: const Center(
+                            child: Text('No hay facturas registradas.'),
+                          ),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      itemCount: invoices.length,
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemBuilder: (context, index) {
+                        final invoice = invoices[index];
+                        return ListTile(
+                          leading: Icon(
+                            invoice.documentType == 'invoice'
+                                ? Icons.receipt_long
+                                : Icons.receipt,
+                            color: invoice.documentType == 'invoice'
+                                ? Colors.blue
+                                : Colors.orange,
+                          ),
+                          title: Text(
+                            invoice.clientName,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            '${invoice.documentType == 'invoice' ? 'FAC' : 'REC'} #${invoice.invoiceNumber} • ${DateFormat('dd/MM/yyyy HH:mm').format(invoice.createdAt)}',
+                          ),
+                          trailing: Text(
+                            'L. ${invoice.totalAmount.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green[700],
+                              fontSize: 15,
+                            ),
+                          ),
+                          onTap: () {
+                            _showInvoiceDetailDialog(invoice);
+                          },
+                        );
+                      },
+                    ),
             ),
           ),
       ],
@@ -183,70 +252,76 @@ class _BalanceScreenState extends State<BalanceScreen>
     );
     final totalInvoices = balanceProvider.invoices.length;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Summary Card
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  const Text(
-                    'INGRESOS TOTALES',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.bold,
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _loadData();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Summary Card
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    const Text(
+                      'INGRESOS TOTALES',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'L. ${totalIncome.toStringAsFixed(2)}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green[800],
+                    const SizedBox(height: 8),
+                    Text(
+                      'L. ${totalIncome.toStringAsFixed(2)}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green[800],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Periodo: ${_dateFormatRange(_dateRange)}'),
-                ],
+                    const SizedBox(height: 16),
+                    Text('Periodo: ${_dateFormatRange(_dateRange)}'),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-          Row(
-            children: [
-              Expanded(
-                child: _MetricCard(
-                  title: 'Facturas',
-                  value: totalInvoices.toString(),
-                  icon: Icons.receipt_long,
-                  color: Colors.blue,
+            Row(
+              children: [
+                Expanded(
+                  child: _MetricCard(
+                    title: 'Facturas',
+                    value: totalInvoices.toString(),
+                    icon: Icons.receipt_long,
+                    color: Colors.blue,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _MetricCard(
-                  title: 'Promedio',
-                  value: totalInvoices > 0
-                      ? 'L. ${(totalIncome / totalInvoices).toStringAsFixed(2)}'
-                      : 'L. 0.00',
-                  icon: Icons.analytics,
-                  color: Colors.orange,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _MetricCard(
+                    title: 'Promedio',
+                    value: totalInvoices > 0
+                        ? 'L. ${(totalIncome / totalInvoices).toStringAsFixed(2)}'
+                        : 'L. 0.00',
+                    icon: Icons.analytics,
+                    color: Colors.orange,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -256,6 +331,97 @@ class _BalanceScreenState extends State<BalanceScreen>
     final start = DateFormat('dd/MM/yy').format(range.start);
     final end = DateFormat('dd/MM/yy').format(range.end);
     return '$start - $end';
+  }
+
+  void _showInvoiceDetailDialog(Invoice invoice) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          '${invoice.documentType == 'invoice' ? 'FACTURA' : 'RECIBO'} #${invoice.invoiceNumber}',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetailRow('Cliente', invoice.clientName),
+                _buildDetailRow('RTN', invoice.clientRtn ?? 'Consumidor Final'),
+                _buildDetailRow(
+                  'Fecha',
+                  DateFormat('dd/MM/yyyy HH:mm').format(invoice.createdAt),
+                ),
+                const Divider(),
+                const Text(
+                  'Items:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                ...invoice.items.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${item.description} (x${item.quantity})',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        Text(
+                          'L. ${item.total.toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(),
+                _buildDetailRow(
+                  'Total',
+                  'L. ${invoice.totalAmount.toStringAsFixed(2)}',
+                  isBold: true,
+                  color: Colors.green[700],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey)),
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

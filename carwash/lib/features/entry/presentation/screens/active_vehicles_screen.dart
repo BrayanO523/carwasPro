@@ -4,7 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/active_vehicles_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../domain/entities/vehicle.dart';
+import 'package:carwash/features/entry/domain/entities/vehicle.dart';
+// import 'package:url_launcher/url_launcher.dart'; // Removed: Moved to Provider
+import 'package:carwash/features/entry/domain/repositories/vehicle_entry_repository.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ActiveVehiclesScreen extends StatefulWidget {
   const ActiveVehiclesScreen({super.key});
@@ -20,9 +23,13 @@ class _ActiveVehiclesScreenState extends State<ActiveVehiclesScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final companyId = context.read<AuthProvider>().currentUser?.companyId;
+      final currentUser = context.read<AuthProvider>().currentUser;
+      final companyId = currentUser?.companyId;
       if (companyId != null) {
-        context.read<ActiveVehiclesProvider>().init(companyId);
+        context.read<ActiveVehiclesProvider>().init(
+          companyId,
+          branchId: currentUser?.branchId,
+        );
       }
     });
 
@@ -90,47 +97,61 @@ class _ActiveVehiclesScreenState extends State<ActiveVehiclesScreen> {
           Expanded(
             child: provider.isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : provider.vehicles.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.directions_car_outlined,
-                          size: 64,
-                          color: Colors.grey[300],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No hay vehículos',
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        FilledButton.icon(
-                          onPressed: () => context.push('/vehicle-entry'),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Agregar Vehículo'),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: provider.vehicles.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final vehicle = provider.vehicles[index];
-                      return _VehicleCard(vehicle: vehicle);
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      await provider.refresh();
                     },
+                    child: provider.vehicles.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(
+                                height:
+                                    MediaQuery.of(context).size.height * 0.6,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.directions_car_outlined,
+                                      size: 64,
+                                      color: Colors.grey[300],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No hay vehículos',
+                                      style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    FilledButton.icon(
+                                      onPressed: () =>
+                                          context.push('/vehicle-entry'),
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Agregar Vehículo'),
+                                      style: FilledButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 24,
+                                          vertical: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: provider.vehicles.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final vehicle = provider.vehicles[index];
+                              return _VehicleCard(vehicle: vehicle);
+                            },
+                          ),
                   ),
           ),
         ],
@@ -168,7 +189,9 @@ class _VehicleCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   image: vehicle.photoUrls.isNotEmpty
                       ? DecorationImage(
-                          image: NetworkImage(vehicle.photoUrls.first),
+                          image: CachedNetworkImageProvider(
+                            vehicle.photoUrls.first,
+                          ),
                           fit: BoxFit.cover,
                         )
                       : null,
@@ -254,29 +277,50 @@ class _VehicleCard extends StatelessWidget {
 
                           if (confirm == true && context.mounted) {
                             try {
+                              final companyName =
+                                  context.read<AuthProvider>().companyName ??
+                                  'CarWash';
                               await context
                                   .read<ActiveVehiclesProvider>()
-                                  .markAsWashed(vehicle.id);
+                                  .completeWashAndNotify(
+                                    vehicle: vehicle,
+                                    companyName: companyName,
+                                  );
+
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
-                                      'Vehículo marcado como lavado',
+                                      'Vehículo marcado como lavado y notificado',
                                     ),
                                   ),
                                 );
                               }
                             } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error: $e')),
-                                );
+                              if (!context.mounted) return;
+
+                              String message = 'Error: $e';
+                              Color color = Colors.red;
+
+                              if (e is NoPhoneException) {
+                                message =
+                                    'El cliente no tiene teléfono registrado';
+                              } else if (e is WhatsAppLaunchException) {
+                                message =
+                                    'Esta persona no tiene WhatsApp (o el número es incorrecto)';
                               }
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(message),
+                                  backgroundColor: color,
+                                ),
+                              );
                             }
                           }
                         },
                         icon: const Icon(Icons.check_circle_outline, size: 18),
-                        label: const Text('Terminar Lavado'),
+                        label: const Text('Terminar y Avisar'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green[50],
                           foregroundColor: Colors.green[800],
@@ -311,9 +355,19 @@ class _VehicleCard extends StatelessWidget {
                   child: PageView.builder(
                     itemCount: vehicle.photoUrls.length,
                     itemBuilder: (context, index) {
-                      return Image.network(
-                        vehicle.photoUrls[index],
+                      return CachedNetworkImage(
+                        imageUrl: vehicle.photoUrls[index],
                         fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey[200],
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.error, color: Colors.grey),
+                        ),
                       );
                     },
                   ),

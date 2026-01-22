@@ -4,12 +4,48 @@ class WashTypesSeeder {
   static Future<void> seed() async {
     final collection = FirebaseFirestore.instance.collection('tiposLavados');
 
-    // Check if collection is empty
-    final snapshot = await collection.limit(1).get();
-    if (snapshot.docs.isNotEmpty) {
-      return; // Already seeded
+    // MIGRATION: Fix existing documents missing 'empresa_id'
+    final existingSnapshot = await collection.get();
+    if (existingSnapshot.docs.isNotEmpty) {
+      final batchUpdate = FirebaseFirestore.instance.batch();
+      bool anyUpdated = false;
+
+      for (final doc in existingSnapshot.docs) {
+        final data = doc.data();
+        // Check if missing or null. If missing, we want to set it to null explicitly?
+        // Actually, if key is missing, data['empresa_id'] is null.
+        // But in Firestore, we want the field to exist as null for the query `isNull: true` to work reliably?
+        // Or at least ensure consistent schema.
+
+        bool needsUpdate = false;
+        Map<String, dynamic> updates = {};
+
+        if (!data.containsKey('empresa_id')) {
+          updates['empresa_id'] = null; // Set explicitly to null
+          needsUpdate = true;
+        }
+        if (!data.containsKey('sucursal_ids')) {
+          updates['sucursal_ids'] = [];
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          batchUpdate.update(doc.reference, updates);
+          anyUpdated = true;
+        }
+      }
+
+      if (anyUpdated) {
+        print("Migrating existing wash types...");
+        await batchUpdate.commit();
+        print("Migration complete.");
+      }
+
+      // If we have data (migrated or not), we stop here. Use separate logic if we want to add missing defaults.
+      return;
     }
 
+    // SEED: If empty, create initial data
     final batch = FirebaseFirestore.instance.batch();
 
     final List<Map<String, dynamic>> services = [
@@ -26,6 +62,8 @@ class WashTypesSeeder {
           "grande": 280,
         },
         "activo": true,
+        "empresa_id": null,
+        "sucursal_ids": [],
       },
       {
         "nombre": "Lavado Completo",
@@ -39,6 +77,8 @@ class WashTypesSeeder {
           "grande": 450,
         },
         "activo": true,
+        "empresa_id": null,
+        "sucursal_ids": [],
       },
 
       // SERVICIOS EXTRA
@@ -53,6 +93,8 @@ class WashTypesSeeder {
           "grande": 300,
         },
         "activo": true,
+        "empresa_id": null,
+        "sucursal_ids": [],
       },
       {
         "nombre": "Lavado de Chasis",
@@ -65,6 +107,8 @@ class WashTypesSeeder {
           "grande": 250,
         },
         "activo": true,
+        "empresa_id": null,
+        "sucursal_ids": [],
       },
       {
         "nombre": "Pasteado (Encerado)",
@@ -78,6 +122,8 @@ class WashTypesSeeder {
           "grande": 500,
         },
         "activo": true,
+        "empresa_id": null,
+        "sucursal_ids": [],
       },
       {
         "nombre": "Pulido de Faros",
@@ -90,6 +136,8 @@ class WashTypesSeeder {
           "grande": 350,
         },
         "activo": true,
+        "empresa_id": null,
+        "sucursal_ids": [],
       },
       {
         "nombre": "Lavado de Tapicería",
@@ -103,6 +151,8 @@ class WashTypesSeeder {
           "grande": 1200,
         },
         "activo": true,
+        "empresa_id": null,
+        "sucursal_ids": [],
       },
       {
         "nombre": "Descontaminado (Clay Bar)",
@@ -115,6 +165,8 @@ class WashTypesSeeder {
           "grande": 700,
         },
         "activo": true,
+        "empresa_id": null,
+        "sucursal_ids": [],
       },
     ];
 

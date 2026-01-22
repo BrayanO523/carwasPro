@@ -14,6 +14,7 @@ class VehicleModel extends Vehicle {
     super.plate,
     super.brand,
     super.color,
+    super.branchId,
     super.vehicleType,
     super.services,
   });
@@ -32,6 +33,7 @@ class VehicleModel extends Vehicle {
       plate: data['placa'],
       brand: data['marca'],
       color: data['color'],
+      branchId: data['sucursal_id'],
       vehicleType: data['tipo_vehiculo'],
       services: List<String>.from(data['servicios'] ?? []),
     );
@@ -50,6 +52,7 @@ class VehicleModel extends Vehicle {
       'marca': brand,
       'color': color,
       'tipo_vehiculo': vehicleType,
+      'sucursal_id': branchId,
       'servicios': services,
     };
   }

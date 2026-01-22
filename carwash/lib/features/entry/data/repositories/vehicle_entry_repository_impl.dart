@@ -104,17 +104,25 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
   }
 
   @override
-  Stream<List<Vehicle>> getVehiclesStream(String companyId) {
-    return _firestore
+  Stream<List<Vehicle>> getVehiclesStream(
+    String companyId, {
+    String? branchId,
+  }) {
+    Query query = _firestore
         .collection('vehiculos')
-        .where('empresa_id', isEqualTo: companyId)
-        .orderBy('fecha_ingreso', descending: true)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => VehicleModel.fromFirestore(doc))
-              .toList();
-        });
+        .where('empresa_id', isEqualTo: companyId);
+
+    if (branchId != null && branchId.isNotEmpty) {
+      query = query.where('sucursal_id', isEqualTo: branchId);
+    }
+
+    return query.orderBy('fecha_ingreso', descending: true).snapshots().map((
+      snapshot,
+    ) {
+      return snapshot.docs
+          .map((doc) => VehicleModel.fromFirestore(doc))
+          .toList();
+    });
   }
 
   @override

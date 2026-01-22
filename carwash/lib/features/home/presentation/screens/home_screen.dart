@@ -3,9 +3,35 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:carwash/features/entry/presentation/providers/active_vehicles_provider.dart';
+import 'package:carwash/features/billing/presentation/providers/billing_provider.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Initialize providers to fetch counts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = context.read<AuthProvider>();
+      final user = authProvider.currentUser;
+      if (user != null) {
+        context.read<ActiveVehiclesProvider>().init(
+          user.companyId,
+          branchId: (user.branchId != null && user.branchId!.isNotEmpty)
+              ? user.branchId
+              : null,
+        );
+        context.read<BillingProvider>().init(user.companyId);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,9 +49,16 @@ class HomeScreen extends StatelessWidget {
       const Color(0xFF2DD4BF), // Teal for Balance
     ];
 
+    final activeVehiclesCount = context
+        .watch<ActiveVehiclesProvider>()
+        .vehicles
+        .length;
+    final readyToBillCount = context.watch<BillingProvider>().vehicles.length;
+
     return Scaffold(
       backgroundColor: Colors.grey[50], // Very light grey/white background
       appBar: AppBar(
+        // ... (AppBar content unchanged)
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
@@ -118,12 +151,14 @@ class HomeScreen extends StatelessWidget {
               color: cardColors[0],
               onTap: () => context.push('/active-vehicles'),
               isPrimary: true,
+              count: activeVehiclesCount,
             ),
             _DashboardCard(
               title: 'Finalizar\nLavado',
               icon: Icons.check_circle_rounded,
               color: cardColors[1],
               onTap: () => context.push('/billing-list'),
+              count: readyToBillCount,
             ),
             _DashboardCard(
               title: 'Ingreso\nVehículo',
@@ -131,24 +166,38 @@ class HomeScreen extends StatelessWidget {
               color: cardColors[2],
               onTap: () => context.push('/vehicle-entry'),
             ),
-            _DashboardCard(
-              title: 'Sucursales',
-              icon: Icons.store_rounded,
-              color: cardColors[3],
-              onTap: () => context.push('/branch-list'),
-            ),
-            _DashboardCard(
-              title: 'Usuarios',
-              icon: Icons.people_alt_rounded,
-              color: cardColors[4],
-              onTap: () => context.push('/user-list'),
-            ),
-            _DashboardCard(
-              title: 'Balance',
-              icon: Icons.account_balance_wallet_rounded,
-              color: cardColors[5],
-              onTap: () => context.push('/balance'),
-            ),
+            if (user?.role == 'admin') ...[
+              _DashboardCard(
+                title: 'Sucursales',
+                icon: Icons.store_rounded,
+                color: cardColors[3],
+                onTap: () => context.push('/branch-list'),
+              ),
+              _DashboardCard(
+                title: 'Usuarios',
+                icon: Icons.people_alt_rounded,
+                color: cardColors[4],
+                onTap: () => context.push('/user-list'),
+              ),
+              _DashboardCard(
+                title: 'Balance',
+                icon: Icons.account_balance_wallet_rounded,
+                color: cardColors[5],
+                onTap: () => context.push('/balance'),
+              ),
+              _DashboardCard(
+                title: 'Empresa\n(SAR)',
+                icon: Icons.business_rounded,
+                color: const Color(0xFF6366F1), // Indigo
+                onTap: () => context.push('/company-config'),
+              ),
+              _DashboardCard(
+                title: 'Precios\n(Servicios)',
+                icon: Icons.attach_money_rounded,
+                color: const Color(0xFFEC4899), // Pink
+                onTap: () => context.push('/wash-types'),
+              ),
+            ],
           ],
         ),
       ),
@@ -162,6 +211,7 @@ class _DashboardCard extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
   final bool isPrimary;
+  final int count;
 
   const _DashboardCard({
     required this.title,
@@ -169,6 +219,7 @@ class _DashboardCard extends StatelessWidget {
     required this.color,
     required this.onTap,
     this.isPrimary = false,
+    this.count = 0,
   });
 
   @override
@@ -242,6 +293,29 @@ class _DashboardCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (count > 0)
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      count.toString(),
+                      style: GoogleFonts.outfit(
+                        color: color, // Use card color for text
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

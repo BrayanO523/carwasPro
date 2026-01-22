@@ -6,6 +6,7 @@ import 'package:carwash/features/billing/presentation/providers/billing_provider
 import 'package:carwash/features/billing/presentation/screens/billing_list_screen.dart';
 import 'package:carwash/features/billing/presentation/screens/billing_process_screen.dart';
 import 'package:carwash/features/billing/presentation/screens/balance_screen.dart';
+import 'package:carwash/features/company/presentation/screens/company_config_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:carwash/features/entry/domain/entities/vehicle.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -41,6 +42,13 @@ import 'core/utils/wash_types_seeder.dart';
 import 'features/billing/domain/repositories/balance_repository.dart';
 import 'features/billing/presentation/providers/balance_provider.dart';
 
+import 'features/wash_types/data/repositories/wash_type_repository_impl.dart';
+import 'features/wash_types/domain/repositories/wash_type_repository.dart';
+import 'features/wash_types/presentation/providers/wash_type_provider.dart';
+import 'features/wash_types/presentation/screens/wash_type_list_screen.dart';
+import 'features/wash_types/presentation/screens/wash_type_form_screen.dart';
+import 'features/wash_types/domain/entities/wash_type.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -59,6 +67,7 @@ class MyApp extends StatelessWidget {
     final companyRepository = CompanyRepositoryImpl();
     final vehicleEntryRepository = VehicleEntryRepositoryImpl();
     final branchRepository = BranchRepositoryImpl();
+    final washTypeRepository = WashTypeRepositoryImpl();
 
     return MultiProvider(
       providers: [
@@ -67,6 +76,7 @@ class MyApp extends StatelessWidget {
         Provider<CompanyRepository>.value(value: companyRepository),
         Provider<VehicleEntryRepository>.value(value: vehicleEntryRepository),
         Provider<BranchRepository>.value(value: branchRepository),
+        Provider<WashTypeRepository>.value(value: washTypeRepository),
 
         // Inject ViewModels/Providers
         ChangeNotifierProvider(
@@ -84,8 +94,10 @@ class MyApp extends StatelessWidget {
           ),
         ),
         ChangeNotifierProvider(
-          create: (_) =>
-              VehicleEntryProvider(repository: vehicleEntryRepository),
+          create: (_) => VehicleEntryProvider(
+            repository: vehicleEntryRepository,
+            washTypeRepository: washTypeRepository,
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) => BranchProvider(repository: branchRepository),
@@ -100,14 +112,22 @@ class MyApp extends StatelessWidget {
           create: (_) =>
               ActiveVehiclesProvider(repository: vehicleEntryRepository),
         ),
-        ChangeNotifierProvider(
-          create: (_) => BillingProvider(repository: vehicleEntryRepository),
-        ),
         // Balance Feature
         Provider<BalanceRepository>(create: (_) => BalanceRepositoryImpl()),
         ChangeNotifierProvider(
           create: (context) =>
               BalanceProvider(repository: context.read<BalanceRepository>()),
+        ),
+
+        // Billing Feature (Depends on VehicleEntryRepo and BalanceRepo)
+        ChangeNotifierProvider(
+          create: (context) => BillingProvider(
+            repository: vehicleEntryRepository,
+            balanceRepository: context.read<BalanceRepository>(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => WashTypeProvider(repository: washTypeRepository),
         ),
       ],
       child: const AppContent(),
@@ -180,6 +200,25 @@ class AppContent extends StatelessWidget {
         GoRoute(
           path: '/balance',
           builder: (context, state) => const BalanceScreen(),
+        ),
+        GoRoute(
+          path: '/company-config',
+          builder: (context, state) => const CompanyConfigScreen(),
+        ),
+        GoRoute(
+          path: '/wash-types',
+          builder: (context, state) => const WashTypeListScreen(),
+        ),
+        GoRoute(
+          path: '/wash-types/add',
+          builder: (context, state) => const WashTypeFormScreen(),
+        ),
+        GoRoute(
+          path: '/wash-types/edit',
+          builder: (context, state) {
+            final washType = state.extra as WashType;
+            return WashTypeFormScreen(washType: washType);
+          },
         ),
       ],
     );

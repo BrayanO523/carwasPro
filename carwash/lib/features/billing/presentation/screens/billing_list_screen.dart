@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:carwash/features/auth/presentation/providers/auth_provider.dart';
 import '../providers/billing_provider.dart';
 import 'package:carwash/features/entry/domain/entities/vehicle.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class BillingListScreen extends StatefulWidget {
   const BillingListScreen({super.key});
@@ -74,34 +75,48 @@ class _BillingListScreenState extends State<BillingListScreen> {
           Expanded(
             child: provider.isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : vehicles.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No hay vehículos para facturar',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: vehicles.length,
-                    itemBuilder: (context, index) {
-                      final vehicle = vehicles[index];
-                      return _BillingVehicleCard(vehicle: vehicle);
+                : RefreshIndicator(
+                    onRefresh: () async {
+                      await provider.refresh();
                     },
+                    child: vehicles.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(
+                                height:
+                                    MediaQuery.of(context).size.height * 0.7,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.receipt_long_outlined,
+                                        size: 64,
+                                        color: Colors.grey[400],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'No hay vehículos para facturar',
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: vehicles.length,
+                            itemBuilder: (context, index) {
+                              final vehicle = vehicles[index];
+                              return _BillingVehicleCard(vehicle: vehicle);
+                            },
+                          ),
                   ),
           ),
         ],
@@ -138,7 +153,9 @@ class _BillingVehicleCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   image: vehicle.photoUrls.isNotEmpty
                       ? DecorationImage(
-                          image: NetworkImage(vehicle.photoUrls.first),
+                          image: CachedNetworkImageProvider(
+                            vehicle.photoUrls.first,
+                          ),
                           fit: BoxFit.cover,
                         )
                       : null,

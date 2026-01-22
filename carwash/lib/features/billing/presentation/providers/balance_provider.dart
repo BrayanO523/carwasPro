@@ -37,21 +37,42 @@ class BalanceProvider extends ChangeNotifier {
     }
   }
 
+  // Cache State
+  String? _lastCompanyId;
+  DateTime? _lastStartDate;
+  DateTime? _lastEndDate;
+
   Future<void> loadInvoices(
     String companyId, {
     DateTime? startDate,
     DateTime? endDate,
+    bool forceRefresh = false,
   }) async {
+    // Cache check
+    if (!forceRefresh &&
+        companyId == _lastCompanyId &&
+        startDate == _lastStartDate &&
+        endDate == _lastEndDate &&
+        _invoices.isNotEmpty) {
+      return;
+    }
+
+    // Update Cache State
+    _lastCompanyId = companyId;
+    _lastStartDate = startDate;
+    _lastEndDate = endDate;
+
     try {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
 
-      _invoices = await _repository.getInvoices(
+      final invoicesResponse = await _repository.getInvoices(
         companyId,
         startDate: startDate,
         endDate: endDate,
       );
+      _invoices = List<Invoice>.from(invoicesResponse);
 
       _isLoading = false;
       notifyListeners();

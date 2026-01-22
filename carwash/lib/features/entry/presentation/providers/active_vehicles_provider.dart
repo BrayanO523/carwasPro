@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../domain/entities/vehicle.dart';
 import '../../domain/repositories/vehicle_entry_repository.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ActiveVehiclesProvider extends ChangeNotifier {
   final VehicleEntryRepository _repository;
@@ -18,19 +19,33 @@ class ActiveVehiclesProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   List<Vehicle> get vehicles => _filteredVehicles();
 
-  void init(String companyId) {
+  // Cache state
+  String? _currentCompanyId;
+  String? _currentBranchId;
+
+  void init(String companyId, {String? branchId, bool force = false}) {
     if (companyId.isEmpty) {
       _isLoading = false;
       notifyListeners();
       return;
     }
 
+    // Cache check: If generic inputs match current state, do nothing
+    if (!force &&
+        companyId == _currentCompanyId &&
+        branchId == _currentBranchId) {
+      return;
+    }
+
+    _currentCompanyId = companyId;
+    _currentBranchId = branchId;
+
     _isLoading = true;
     notifyListeners();
 
     _vehiclesSubscription?.cancel();
     _vehiclesSubscription = _repository
-        .getVehiclesStream(companyId)
+        .getVehiclesStream(companyId, branchId: branchId)
         .listen(
           (vehicles) {
             _allVehicles = vehicles;
@@ -45,6 +60,16 @@ class ActiveVehiclesProvider extends ChangeNotifier {
             notifyListeners();
           },
         );
+  }
+
+  Future<void> refresh() async {
+    if (_currentCompanyId != null) {
+      // Re-initialize with forced reload
+      init(_currentCompanyId!, branchId: _currentBranchId, force: true);
+
+      // Wait a bit to simulate network delay
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
   }
 
   Map<String, String> _serviceNames = {};
@@ -86,9 +111,48 @@ class ActiveVehiclesProvider extends ChangeNotifier {
   Future<void> markAsWashed(String vehicleId) async {
     try {
       await _repository.updateVehicleStatus(vehicleId, Vehicle.statusWashed);
-      // The stream will automatically update the list, removing the vehicle
     } catch (e) {
       print('Error marking vehicle as washed: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> completeWashAndNotify({
+    required Vehicle vehicle,
+    required String companyName,
+  }) async {
+    try {
+      // 1. Mark as Washed
+      await markAsWashed(vehicle.id);
+
+      // 2. Fetch Client Info
+      final client = await _repository.getClientById(vehicle.clientId);
+      if (client == null || client.phone == null || client.phone!.isEmpty) {
+        throw NoPhoneException();
+      }
+
+      // 3. Prepare Phone
+      String phone = client.phone!.replaceAll(RegExp(r'\D'), '');
+      if (!phone.startsWith('504')) phone = '504$phone';
+
+      // 4. Prepare Message
+      final clientName = vehicle.clientName;
+      final message = Uri.encodeComponent(
+        "Un gusto saludar desde $companyName, estimado $clientName, le informo que su vehiculo ya fue lavado y puede pasar por el",
+      );
+
+      // 5. Launch WhatsApp
+      final webUrl = Uri.parse("https://wa.me/$phone?text=$message");
+
+      if (!await launchUrl(webUrl, mode: LaunchMode.externalApplication)) {
+        throw WhatsAppLaunchException();
+      }
+    } catch (e) {
+      // Re-throw known domain exceptions or wrap unknown ones
+      if (e is NoPhoneException || e is WhatsAppLaunchException) {
+        rethrow;
+      }
+      print('Error in completeWashAndNotify: $e');
       rethrow;
     }
   }
@@ -99,3 +163,7 @@ class ActiveVehiclesProvider extends ChangeNotifier {
     super.dispose();
   }
 }
+
+class NoPhoneException implements Exception {}
+
+class WhatsAppLaunchException implements Exception {}

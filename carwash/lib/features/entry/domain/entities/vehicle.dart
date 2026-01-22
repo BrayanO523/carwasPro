@@ -11,6 +11,7 @@ class Vehicle {
   final String? plate;
   final String? brand;
   final String? color;
+  final String? branchId;
   final String? vehicleType; // moto, turismo, camioneta, grande
   final List<String> services;
 
@@ -30,6 +31,7 @@ class Vehicle {
     this.plate,
     this.brand,
     this.color,
+    this.branchId,
     this.vehicleType,
     this.services = const [],
   });
