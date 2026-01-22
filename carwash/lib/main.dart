@@ -38,7 +38,7 @@ import 'features/branch/presentation/providers/branch_provider.dart';
 import 'features/auth/presentation/providers/user_management_provider.dart';
 import 'features/entry/presentation/providers/active_vehicles_provider.dart';
 
-import 'core/utils/wash_types_seeder.dart';
+// import 'core/utils/wash_types_seeder.dart'; // Removed
 import 'features/billing/domain/repositories/balance_repository.dart';
 import 'features/billing/presentation/providers/balance_provider.dart';
 
@@ -52,8 +52,8 @@ import 'features/wash_types/domain/entities/wash_type.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // Seed initial data for Wash Types (if empty)
-  await WashTypesSeeder.seed();
+  // Seeding is now handled by legacy migration or admin tools, not on every app start.
+  // await WashTypesSeeder.seed();
   runApp(const MyApp());
 }
 
