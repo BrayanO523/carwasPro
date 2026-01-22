@@ -497,21 +497,15 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () {
-                        setState(() {
-                          _invoiceItems.removeAt(index);
-                        });
-                      },
+                      onPressed: () => _confirmRemoveItem(index),
                     ),
                   ],
                 ),
               );
             }),
-            // Add Item Button (Mock)
+            // Add Item Button
             TextButton.icon(
-              onPressed: () {
-                // TODO: Add new blank item
-              },
+              onPressed: _showAddItemDialog,
               icon: const Icon(Icons.add),
               label: const Text('Agregar Item'),
             ),
@@ -575,6 +569,97 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
               fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
               fontSize: fontSize,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRemoveItem(int index) {
+    final item = _invoiceItems[index];
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar Eliminación'),
+        content: Text(
+          '¿Estás seguro de quitar "${item.description}" de la factura?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _invoiceItems.removeAt(index);
+              });
+            },
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddItemDialog() {
+    final provider = context.read<BillingProvider>();
+    final catalog = provider.washTypesCatalog;
+    final vehicleType = widget.vehicle.vehicleType ?? 'turismo';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'Agregar Servicio',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ),
+          Expanded(
+            child: catalog.isEmpty
+                ? const Center(child: Text('No hay servicios disponibles'))
+                : ListView.separated(
+                    itemCount: catalog.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final service = catalog[index];
+                      final name = service['nombre'] ?? 'Servicio';
+                      final prices =
+                          service['precios'] as Map<String, dynamic>?;
+                      final price = (prices?[vehicleType] ?? 0).toDouble();
+
+                      return ListTile(
+                        leading: const Icon(Icons.local_car_wash),
+                        title: Text(name),
+                        subtitle: Text(
+                          'Precio: L. ${price.toStringAsFixed(2)}',
+                        ),
+                        onTap: () {
+                          // Add Item
+                          setState(() {
+                            _invoiceItems.add(
+                              InvoiceItem(
+                                description: name,
+                                unitPrice: price,
+                                quantity: 1,
+                                taxType: '15', // Default 15% ISV
+                              ),
+                            );
+                          });
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
           ),
         ],
       ),
