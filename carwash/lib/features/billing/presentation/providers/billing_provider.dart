@@ -132,11 +132,24 @@ class BillingProvider extends ChangeNotifier {
     // Ideally we should cache by companyId.
 
     try {
+      print(
+        'DEBUG: Loading Catalog for Company: $companyId, Branch: $branchId',
+      );
+      // Fetch both Global (null) and Company Specific
       final snapshot = await FirebaseFirestore.instance
           .collection('tiposLavados')
-          .where('companyId', isEqualTo: companyId) // Filter by Company
-          .where('isActive', isEqualTo: true) // Only active services
+          .where(
+            Filter.or(
+              Filter('empresa_id', isNull: true),
+              Filter('empresa_id', isEqualTo: companyId),
+            ),
+          )
+          .where('activo', isEqualTo: true) // Field is 'activo'
           .get();
+
+      print(
+        'DEBUG: Firestore returned ${snapshot.docs.length} active services (Global + Company).',
+      );
 
       final allDocs = snapshot.docs.map((doc) {
         final data = doc.data();
@@ -145,16 +158,31 @@ class BillingProvider extends ChangeNotifier {
         return data;
       }).toList();
 
-      // Filter by Branch (Client side filtering for array contains)
-      // If branchIds is empty => Available for all branches
-      // If branchIds is not empty => Must contain branchId
+      // Filter by Branch
       _washTypesCatalog = allDocs.where((service) {
-        final branchIds = List<String>.from(service['branchIds'] ?? []);
-        if (branchIds.isEmpty) return true;
-        if (branchId == null)
-          return false; // If specific branch required but none provided
-        return branchIds.contains(branchId);
+        // Field in Firestore is 'sucursal_ids'
+        final branchIds = List<String>.from(service['sucursal_ids'] ?? []);
+        // print('DEBUG: Service ${service['nombre']} branches: $branchIds');
+
+        if (branchIds.isEmpty) return true; // Available to all branches
+
+        if (branchId == null) {
+          print(
+            'DEBUG: Discarding ${service['nombre']} because branchId arg is null',
+          );
+          return false;
+        }
+        final match = branchIds.contains(branchId);
+        if (!match)
+          print(
+            'DEBUG: Discarding ${service['nombre']} because $branchId not in $branchIds',
+          );
+        return match;
       }).toList();
+
+      print(
+        'DEBUG: Final Catalog Size after Branch Filter: ${_washTypesCatalog.length}',
+      );
 
       _isCatalogLoaded = true;
       notifyListeners();
