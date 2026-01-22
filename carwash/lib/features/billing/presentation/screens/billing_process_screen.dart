@@ -71,7 +71,12 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
         final price = (prices?[vehicleType] ?? 0).toDouble();
 
         items.add(
-          InvoiceItem(description: data['nombre'] ?? 'Servicio', price: price),
+          InvoiceItem(
+            description: data['nombre'] ?? 'Servicio',
+            unitPrice: price,
+            quantity: 1, // Default quantity
+            taxType: '15', // Default tax type
+          ),
         );
       }
 
@@ -148,9 +153,20 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
     super.dispose();
   }
 
-  double get _amount => _invoiceItems.fold(0, (sum, item) => sum + item.price);
-  double get _isv => _amount * 0.15;
-  double get _total => _amount + _isv;
+  double get _subtotal =>
+      _invoiceItems.fold(0, (sum, item) => sum + item.total);
+
+  // Simplified calculation for now (assuming all is 15% and no discount)
+  // In the full implementation, this will iterate items and check taxType
+  double get _discountTotal => 0.0;
+  double get _exemptAmount => 0.0;
+  double get _taxableAmount15 => _subtotal;
+  double get _taxableAmount18 => 0.0;
+
+  double get _isv15 => _taxableAmount15 * 0.15;
+  double get _isv18 => _taxableAmount18 * 0.18;
+
+  double get _total => _subtotal - _discountTotal + _isv15 + _isv18;
 
   @override
   Widget build(BuildContext context) {
@@ -333,7 +349,7 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
                                       vertical: 8,
                                     ),
                                     child: Text(
-                                      'L. ${item.price.toStringAsFixed(2)}',
+                                      'L. ${item.total.toStringAsFixed(2)}',
                                       textAlign: TextAlign.right,
                                     ),
                                   ),
@@ -353,11 +369,11 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  'Subtotal:  L. ${_amount.toStringAsFixed(2)}',
+                                  'Subtotal:  L. ${_subtotal.toStringAsFixed(2)}',
                                 ),
                                 Text('Descuento:  L. 0.00'),
                                 Text(
-                                  'ISV (15%):  L. ${_isv.toStringAsFixed(2)}',
+                                  'ISV (15%):  L. ${_isv15.toStringAsFixed(2)}',
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
@@ -494,8 +510,13 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
         clientName: _client!.name,
         clientRtn: _client!.rtn,
         totalAmount: _total,
-        subtotal: _amount,
-        isv: _isv,
+        subtotal: _subtotal,
+        discountTotal: _discountTotal,
+        exemptAmount: _exemptAmount,
+        taxableAmount15: _taxableAmount15,
+        taxableAmount18: _taxableAmount18,
+        isv15: _isv15,
+        isv18: _isv18,
         items: _invoiceItems,
         createdAt: DateTime.now(),
         invoiceNumber:

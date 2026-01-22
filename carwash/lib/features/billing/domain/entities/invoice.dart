@@ -9,8 +9,17 @@ class Invoice {
   final String clientName;
   final String? clientRtn;
   final double totalAmount;
-  final double subtotal;
-  final double isv;
+  final double subtotal; // Base amount before tax
+  final double discountTotal;
+  final double exemptAmount; // Importe Exento
+  final double taxableAmount15; // Importe Gravado 15%
+  final double taxableAmount18; // Importe Gravado 18%
+  final double isv15; // ISV 15%
+  final double isv18; // ISV 18%
+
+  // Compatibility getter
+  double get isv => isv15 + isv18;
+
   final List<InvoiceItem> items;
   final DateTime createdAt;
   final String invoiceNumber;
@@ -26,7 +35,12 @@ class Invoice {
     this.clientRtn,
     required this.totalAmount,
     required this.subtotal,
-    required this.isv,
+    this.discountTotal = 0.0,
+    this.exemptAmount = 0.0,
+    this.taxableAmount15 = 0.0,
+    this.taxableAmount18 = 0.0,
+    this.isv15 = 0.0,
+    this.isv18 = 0.0,
     required this.items,
     required this.createdAt,
     required this.invoiceNumber,
