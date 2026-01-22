@@ -342,6 +342,7 @@ class VehicleEntryScreen extends StatelessWidget {
                           branchId: currentUser?.branchId,
                         );
                         if (success && context.mounted) {
+                          provider.clearForm(); // Reset form
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Vehículo ingresado con éxito'),

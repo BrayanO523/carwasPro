@@ -238,6 +238,19 @@ class VehicleEntryProvider extends ChangeNotifier {
     }
   }
 
+  void clearForm() {
+    nameController.clear();
+    lastNameController.clear();
+    phoneController.clear();
+    modelController.clear();
+    _selectedImages.clear();
+    _selectedBaseServiceId = null;
+    _selectedExtrasIds.clear();
+    _selectedVehicleType = 'turismo';
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   // Price Calculations
   double get subtotal {
     double total = 0;
