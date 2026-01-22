@@ -105,6 +105,8 @@ class BillingProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _washTypesCatalog = [];
   bool _isCatalogLoaded = false;
 
+  List<Map<String, dynamic>> get washTypesCatalog => _washTypesCatalog;
+
   Map<String, dynamic> getServicePrice(String serviceId, String vehicleType) {
     if (_washTypesCatalog.isEmpty) return {};
 
@@ -121,20 +123,37 @@ class BillingProvider extends ChangeNotifier {
     return {'price': price, 'name': service['nombre'] ?? 'Servicio'};
   }
 
-  Future<void> loadWashTypesCatalog() async {
-    if (_isCatalogLoaded) return; // Cache hit
+  Future<void> loadWashTypesCatalog(
+    String companyId, {
+    String? branchId,
+  }) async {
+    // If already loaded for this company (and branch logic matches), return.
+    // For simplicity, we just reload if empty or logic could be added to check consistency.
+    // Ideally we should cache by companyId.
 
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('tiposLavados')
+          .where('companyId', isEqualTo: companyId) // Filter by Company
+          .where('isActive', isEqualTo: true) // Only active services
           .get();
 
-      _washTypesCatalog = snapshot.docs.map((doc) {
+      final allDocs = snapshot.docs.map((doc) {
         final data = doc.data();
         data['documentId'] = doc.id;
-        // Ensure 'id' exists if used elsewhere, else documentId covers it
         if (!data.containsKey('id')) data['id'] = doc.id;
         return data;
+      }).toList();
+
+      // Filter by Branch (Client side filtering for array contains)
+      // If branchIds is empty => Available for all branches
+      // If branchIds is not empty => Must contain branchId
+      _washTypesCatalog = allDocs.where((service) {
+        final branchIds = List<String>.from(service['branchIds'] ?? []);
+        if (branchIds.isEmpty) return true;
+        if (branchId == null)
+          return false; // If specific branch required but none provided
+        return branchIds.contains(branchId);
       }).toList();
 
       _isCatalogLoaded = true;

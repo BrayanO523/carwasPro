@@ -64,7 +64,11 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
     final billingProvider = context.read<BillingProvider>();
 
     // Ensure catalog is loaded (cached)
-    await billingProvider.loadWashTypesCatalog();
+    // Ensure catalog is loaded (cached) - passing filters
+    await billingProvider.loadWashTypesCatalog(
+      widget.vehicle.companyId,
+      branchId: widget.vehicle.branchId,
+    );
 
     if (widget.vehicle.services.isEmpty) {
       if (mounted) setState(() => _isLoadingItems = false);
