@@ -132,9 +132,6 @@ class BillingProvider extends ChangeNotifier {
     // Ideally we should cache by companyId.
 
     try {
-      print(
-        'DEBUG: Loading Catalog for Company: $companyId, Branch: $branchId',
-      );
       // Fetch both Global (null) and Company Specific
       final snapshot = await FirebaseFirestore.instance
           .collection('tiposLavados')
@@ -147,10 +144,6 @@ class BillingProvider extends ChangeNotifier {
           .where('activo', isEqualTo: true) // Field is 'activo'
           .get();
 
-      print(
-        'DEBUG: Firestore returned ${snapshot.docs.length} active services (Global + Company).',
-      );
-
       final allDocs = snapshot.docs.map((doc) {
         final data = doc.data();
         data['documentId'] = doc.id;
@@ -162,27 +155,15 @@ class BillingProvider extends ChangeNotifier {
       _washTypesCatalog = allDocs.where((service) {
         // Field in Firestore is 'sucursal_ids'
         final branchIds = List<String>.from(service['sucursal_ids'] ?? []);
-        // print('DEBUG: Service ${service['nombre']} branches: $branchIds');
 
         if (branchIds.isEmpty) return true; // Available to all branches
 
         if (branchId == null) {
-          print(
-            'DEBUG: Discarding ${service['nombre']} because branchId arg is null',
-          );
           return false;
         }
         final match = branchIds.contains(branchId);
-        if (!match)
-          print(
-            'DEBUG: Discarding ${service['nombre']} because $branchId not in $branchIds',
-          );
         return match;
       }).toList();
-
-      print(
-        'DEBUG: Final Catalog Size after Branch Filter: ${_washTypesCatalog.length}',
-      );
 
       _isCatalogLoaded = true;
       notifyListeners();
