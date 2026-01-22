@@ -54,8 +54,45 @@ class _WashTypeListScreenState extends State<WashTypeListScreen> {
                       children: [
                         SizedBox(
                           height: MediaQuery.of(context).size.height * 0.7,
-                          child: const Center(
-                            child: Text('No hay servicios configurados'),
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text('No hay servicios configurados'),
+                                const SizedBox(height: 16),
+                                FilledButton.icon(
+                                  onPressed: () async {
+                                    final authProvider = context
+                                        .read<AuthProvider>();
+                                    final companyId =
+                                        authProvider.currentUser?.companyId ??
+                                        '';
+                                    final branchId = authProvider
+                                        .currentUser
+                                        ?.branchId; // Try to get from User
+
+                                    if (branchId != null) {
+                                      await provider.seedDefaultCatalog(
+                                        companyId,
+                                        branchId,
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'No se puede cargar: Usuario sin sucursal asignada',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.cloud_download),
+                                  label: const Text('Cargar Catálogo Inicial'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],

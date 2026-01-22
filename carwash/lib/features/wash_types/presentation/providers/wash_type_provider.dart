@@ -83,4 +83,20 @@ class WashTypeProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> seedDefaultCatalog(String companyId, String branchId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _repository.seedDefaultWashTypes(companyId, branchId);
+      await loadWashTypes(companyId, force: true);
+    } catch (e) {
+      _errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

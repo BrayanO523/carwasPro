@@ -81,4 +81,106 @@ class WashTypeRepositoryImpl implements WashTypeRepository {
   Future<void> deleteWashType(String id) async {
     await _collection.doc(id).delete();
   }
+
+  @override
+  Future<void> seedDefaultWashTypes(String companyId, String branchId) async {
+    final batch = FirebaseFirestore.instance.batch();
+
+    final List<Map<String, dynamic>> defaults = [
+      // SERVICIOS BASE
+      {
+        "nombre": "Lavado Sencillo",
+        "descripcion": "Lavado exterior básico: jabón, enjuague y secado.",
+        "categoria": "base",
+        "precios": {
+          "moto": 100,
+          "turismo": 150,
+          "camioneta": 220,
+          "grande": 280,
+        },
+        "activo": true,
+        "empresa_id": companyId,
+        "sucursal_ids": [branchId],
+      },
+      {
+        "nombre": "Lavado Completo",
+        "descripcion":
+            "Lavado exterior, aspirado profundo, limpieza de tablero y almorol.",
+        "categoria": "base",
+        "precios": {
+          "moto": 180,
+          "turismo": 280,
+          "camioneta": 350,
+          "grande": 450,
+        },
+        "activo": true,
+        "empresa_id": companyId,
+        "sucursal_ids": [branchId],
+      },
+      // SERVICIOS EXTRA
+      {
+        "nombre": "Lavado de Motor",
+        "descripcion": "Limpieza y desengrasado del motor.",
+        "categoria": "extra",
+        "precios": {
+          "moto": 150,
+          "turismo": 250,
+          "camioneta": 250,
+          "grande": 300,
+        },
+        "activo": true,
+        "empresa_id": companyId,
+        "sucursal_ids": [branchId],
+      },
+      {
+        "nombre": "Lavado de Chasis",
+        "descripcion": "Lavado a presión de la parte inferior.",
+        "categoria": "extra",
+        "precios": {
+          "moto": 100,
+          "turismo": 200,
+          "camioneta": 200,
+          "grande": 250,
+        },
+        "activo": true,
+        "empresa_id": companyId,
+        "sucursal_ids": [branchId],
+      },
+      {
+        "nombre": "Pasteado (Encerado)",
+        "descripcion": "Aplicación de cera protectora.",
+        "categoria": "extra",
+        "precios": {
+          "moto": 150,
+          "turismo": 300,
+          "camioneta": 400,
+          "grande": 500,
+        },
+        "activo": true,
+        "empresa_id": companyId,
+        "sucursal_ids": [branchId],
+      },
+      {
+        "nombre": "Lavado de Tapicería",
+        "descripcion": "Limpieza profunda de asientos y alfombras.",
+        "categoria": "extra",
+        "precios": {
+          "moto": 300,
+          "turismo": 800,
+          "camioneta": 1000,
+          "grande": 1200,
+        },
+        "activo": true,
+        "empresa_id": companyId,
+        "sucursal_ids": [branchId],
+      },
+    ];
+
+    for (final service in defaults) {
+      final doc = _collection.doc();
+      batch.set(doc, service);
+    }
+
+    await batch.commit();
+  }
 }
