@@ -65,19 +65,6 @@ class _BalanceScreenState extends State<BalanceScreen>
     final balanceProvider = context.watch<BalanceProvider>();
     List<Invoice> invoices = balanceProvider.invoices;
 
-    // Client-side filtering for search text (simple implementation)
-    // Server-side filtering is better for scale, but this works for now.
-    if (_searchController.text.isNotEmpty) {
-      final query = _searchController.text.toLowerCase();
-      invoices = invoices
-          .where(
-            (inv) =>
-                inv.clientName.toLowerCase().contains(query) ||
-                inv.invoiceNumber.toLowerCase().contains(query),
-          )
-          .toList();
-    }
-
     return Column(
       children: [
         Padding(
@@ -91,7 +78,9 @@ class _BalanceScreenState extends State<BalanceScreen>
                     hintText: 'Buscar por Cliente o No. Factura',
                     prefixIcon: Icon(Icons.search),
                   ),
-                  onChanged: (val) => setState(() {}),
+                  onChanged: (val) {
+                    context.read<BalanceProvider>().setSearchText(val);
+                  },
                 ),
               ),
               const SizedBox(width: 8),
