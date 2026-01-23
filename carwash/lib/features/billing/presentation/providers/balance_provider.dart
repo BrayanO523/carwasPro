@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/repositories/balance_repository.dart';
@@ -55,10 +56,17 @@ class BalanceProvider extends ChangeNotifier {
     }
   }
 
-  // Cache State
+  // Cache State & Pagination
   String? _lastCompanyId;
   DateTime? _lastStartDate;
   DateTime? _lastEndDate;
+
+  DocumentSnapshot? _lastDocument;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+
+  bool get hasMore => _hasMore;
+  bool get isLoadingMore => _isLoadingMore;
 
   Future<void> loadInvoices(
     String companyId, {
@@ -66,7 +74,7 @@ class BalanceProvider extends ChangeNotifier {
     DateTime? endDate,
     bool forceRefresh = false,
   }) async {
-    // Cache check
+    // Cache check if not forced and same params
     if (!forceRefresh &&
         companyId == _lastCompanyId &&
         startDate == _lastStartDate &&
@@ -75,28 +83,77 @@ class BalanceProvider extends ChangeNotifier {
       return;
     }
 
-    // Update Cache State
+    // Update Cache State & Reset Pagination
     _lastCompanyId = companyId;
     _lastStartDate = startDate;
     _lastEndDate = endDate;
+    _lastDocument = null;
+    _hasMore = true;
 
     try {
       _isLoading = true;
       _errorMessage = null;
       notifyListeners();
 
-      final invoicesResponse = await _repository.getInvoices(
+      final paginatedResult = await _repository.getInvoices(
         companyId,
         startDate: startDate,
         endDate: endDate,
+        limit: 20,
       );
-      _invoices = List<Invoice>.from(invoicesResponse);
+
+      _invoices = List<Invoice>.from(paginatedResult.items);
+      _lastDocument = paginatedResult.lastDocument;
+
+      // If we got fewer items than limit, no more pages
+      if (paginatedResult.items.length < 20) {
+        _hasMore = false;
+      }
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
       _isLoading = false;
       _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreInvoices() async {
+    if (_isLoadingMore ||
+        !_hasMore ||
+        _lastCompanyId == null ||
+        _lastDocument == null)
+      return;
+
+    try {
+      _isLoadingMore = true;
+      notifyListeners();
+
+      final paginatedResult = await _repository.getInvoices(
+        _lastCompanyId!,
+        startDate: _lastStartDate,
+        endDate: _lastEndDate,
+        limit: 20,
+        startAfter: _lastDocument,
+      );
+
+      if (paginatedResult.items.isEmpty) {
+        _hasMore = false;
+      } else {
+        _invoices.addAll(paginatedResult.items);
+        _lastDocument = paginatedResult.lastDocument;
+        if (paginatedResult.items.length < 20) {
+          _hasMore = false;
+        }
+      }
+
+      _isLoadingMore = false;
+      notifyListeners();
+    } catch (e) {
+      _isLoadingMore = false;
+      // Fail silently for load more, or show snackbar in UI
+      print('Error loading more invoices: $e');
       notifyListeners();
     }
   }

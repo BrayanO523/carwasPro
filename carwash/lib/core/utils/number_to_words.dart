@@ -2,8 +2,11 @@ class NumberToWords {
   static String convert(double number) {
     if (number == 0) return 'CERO LEMPIRAS EXACTOS';
 
-    int integers = number.truncate();
-    int decimals = ((number - integers) * 100).round();
+    // Fix rounding issues (e.g. 321.996 -> 322.00)
+    double rounded = double.parse(number.toStringAsFixed(2));
+
+    int integers = rounded.truncate();
+    int decimals = ((rounded - integers) * 100).round();
 
     String integersText = _convertInteger(integers);
     String decimalsText = decimals.toString().padLeft(2, '0');
@@ -45,17 +48,17 @@ class NumberToWords {
       'TRECE',
       'CATORCE',
       'QUINCE',
-      'DIECISEIS',
+      'DIECISÉIS',
       'DIECISIETE',
       'DIECIOCHO',
       'DIECINUEVE',
       'VEINTE',
-      'VEINTIUN',
-      'VEINTIDOS',
-      'VEINTITRES',
+      'VEINTIÚN',
+      'VEINTIDÓS',
+      'VEINTITRÉS',
       'VEINTICUATRO',
       'VEINTICINCO',
-      'VEINTISEIS',
+      'VEINTISÉIS',
       'VEINTISIETE',
       'VEINTIOCHO',
       'VEINTINUEVE',
