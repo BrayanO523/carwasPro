@@ -91,10 +91,13 @@ class UserManagementProvider extends ChangeNotifier {
       // Let's update AuthRepository interface to include `getCompanyUsers`.
 
       // WAIT: I can just use FirebaseFirestore.instance for now to list users.
+      print('Loading users for company: $companyId');
       final snapshot = await FirebaseFirestore.instance
           .collection('usuarios')
           .where('empresa_id', isEqualTo: companyId)
           .get();
+
+      print('Found ${snapshot.docs.length} users');
 
       _users = snapshot.docs
           .map((doc) => UserModel.fromFirestore(doc))
@@ -134,7 +137,11 @@ class UserManagementProvider extends ChangeNotifier {
       clearForm();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      if (e.toString().contains('email-already-in-use')) {
+        _errorMessage = 'Este correo electrónico ya está registrado.';
+      } else {
+        _errorMessage = 'Error al crear usuario: $e';
+      }
       return false;
     } finally {
       _isLoading = false;

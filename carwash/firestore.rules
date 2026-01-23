@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- Helper Functions ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Fetch user from 'usuarios' collection
+    function getUserData() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+    
+    // Check if user belongs to the company (using 'empresa_id')
+    function belongsToCompany(companyId) {
+      return isSignedIn() && getUserData().empresa_id == companyId;
+    }
+
+    // Check if resource belongs to same company (using 'empresa_id')
+    function isSameCompany(resourceData) {
+      return belongsToCompany(resourceData.empresa_id);
+    }
+    
+    // --- Collection Rules (Spanish Names) ---
+
+    // USUARIOS (Users)
+    // USUARIOS (Users)
+    match /usuarios/{userId} {
+      // 1. User can read/write their own profile
+      // 2. Admin can read/write users from SAME Company
+      
+      // Helper to check if requester is admin of the target user's company
+      function isAdminOfTargetCompany(targetData) {
+        return belongsToCompany(targetData.empresa_id) && getUserData().rol == 'admin';
+      }
+
+      allow read: if (isSignedIn() && request.auth.uid == userId) || 
+                  (isSignedIn() && belongsToCompany(resource.data.empresa_id));
+      
+      allow create: if isSignedIn() && request.auth.uid == userId || // Self-registration (e.g. Owner)
+                    (isSignedIn() && isAdminOfTargetCompany(request.resource.data));
+      
+      allow update: if (isSignedIn() && request.auth.uid == userId) || 
+                    (isSignedIn() && isAdminOfTargetCompany(resource.data));
+                    
+      allow delete: if isSignedIn() && isAdminOfTargetCompany(resource.data);
+    }
+
+    // EMPRESAS (Companies)
+    match /empresas/{companyId} {
+      allow read: if belongsToCompany(companyId);
+      // Registration allows create
+      allow create: if isSignedIn();
+      allow update: if belongsToCompany(companyId);
+    }
+
+    // SUCURSALES (Branches)
+    match /sucursales/{branchId} {
+      allow read: if isSameCompany(resource.data);
+      allow write: if isSameCompany(request.resource.data);
+    }
+
+    // CLIENTES (Clients)
+    match /clientes/{clientId} {
+      allow read: if isSameCompany(resource.data);
+      allow write: if isSameCompany(request.resource.data);
+    }
+
+    // VEHICULOS (Vehicles)
+    match /vehiculos/{vehicleId} {
+      allow read: if isSameCompany(resource.data);
+      allow create: if isSameCompany(request.resource.data);
+      allow update: if isSameCompany(resource.data) && isSameCompany(request.resource.data);
+    }
+
+    // TIPOS DE LAVADO (Wash Types)
+    match /tiposLavados/{docId} {
+      // Allow read if Global (empresa_id is null) OR User belongs to Company
+      allow read: if resource.data.empresa_id == null || belongsToCompany(resource.data.empresa_id);
+      
+      // Write: Only if belongs to company (No global editing here)
+      allow create: if belongsToCompany(request.resource.data.empresa_id);
+      allow update: if belongsToCompany(resource.data.empresa_id) 
+                   && belongsToCompany(request.resource.data.empresa_id);
+      allow delete: if belongsToCompany(resource.data.empresa_id);
+    }
+
+    // FACTURACION (Fiscal Config)
+    match /facturacion/{docId} {
+      allow read: if isSameCompany(resource.data);
+      allow write: if isSameCompany(request.resource.data);
+    }
+
+    // FACTURAS (Invoices)
+    match /facturas/{docId} {
+      allow read: if isSameCompany(resource.data);
+      allow create: if isSameCompany(request.resource.data);
+      allow update: if isSameCompany(resource.data) && isSameCompany(request.resource.data);
+    }
+  }
+}
