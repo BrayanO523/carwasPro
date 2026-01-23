@@ -7,6 +7,7 @@ import '../../domain/entities/vehicle.dart';
 import '../../domain/repositories/vehicle_entry_repository.dart';
 import '../models/client_model.dart';
 import '../models/vehicle_model.dart';
+import '../../../../core/utils/image_utils.dart';
 
 class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
   final FirebaseFirestore _firestore;
@@ -96,8 +97,11 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
     // Path structure: empresa/sucursal/cliente/vehiculo/imagen.jpg
     final storagePath = '$companyId/$branchId/$clientId/$vehicleId/$fileName';
 
+    // Compress Image
+    final compressedFile = await ImageUtils.compressImage(imageFile);
+
     final ref = _storage.ref().child(storagePath);
-    final uploadTask = await ref.putFile(imageFile);
+    final uploadTask = await ref.putFile(compressedFile);
     final downloadUrl = await uploadTask.ref.getDownloadURL();
 
     return downloadUrl;
@@ -133,12 +137,23 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
   }
 
   @override
-  Future<Map<String, String>> getServiceIdsToNames() async {
+  Future<Map<String, String>> getServiceIdsToNames({String? companyId}) async {
     try {
-      final snapshot = await _firestore.collection('tiposLavados').get();
+      Query query = _firestore.collection('tiposLavados');
+
+      if (companyId != null && companyId.isNotEmpty) {
+        query = query.where(
+          Filter.or(
+            Filter('empresa_id', isNull: true),
+            Filter('empresa_id', isEqualTo: companyId),
+          ),
+        );
+      } // If no companyId, it might fail or return only public depending on usage, but we expect companyId
+
+      final snapshot = await query.get();
       final map = <String, String>{};
       for (final doc in snapshot.docs) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         if (data.containsKey('nombre')) {
           map[doc.id] = data['nombre'] as String;
         }

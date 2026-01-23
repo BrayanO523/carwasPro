@@ -75,7 +75,10 @@ class ActiveVehiclesProvider extends ChangeNotifier {
   Map<String, String> _serviceNames = {};
 
   Future<void> _loadServiceNames() async {
-    _serviceNames = await _repository.getServiceIdsToNames();
+    if (_currentCompanyId == null) return;
+    _serviceNames = await _repository.getServiceIdsToNames(
+      companyId: _currentCompanyId,
+    );
     notifyListeners();
   }
 
