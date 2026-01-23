@@ -18,14 +18,31 @@ class _BalanceScreenState extends State<BalanceScreen>
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   DateTimeRange? _dateRange;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData(); // Load initial data
+      _loadData();
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      context.read<BalanceProvider>().loadMoreInvoices();
+    }
   }
 
   Future<void> _loadData() async {
@@ -190,9 +207,19 @@ class _BalanceScreenState extends State<BalanceScreen>
                       ],
                     )
                   : ListView.builder(
-                      itemCount: invoices.length,
+                      controller: _scrollController,
+                      itemCount:
+                          invoices.length +
+                          (balanceProvider.isLoadingMore ? 1 : 0),
                       physics: const AlwaysScrollableScrollPhysics(),
                       itemBuilder: (context, index) {
+                        if (index == invoices.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
+                        }
+
                         final invoice = invoices[index];
                         return ListTile(
                           leading: Icon(

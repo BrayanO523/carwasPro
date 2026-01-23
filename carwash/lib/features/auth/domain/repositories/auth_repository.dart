@@ -13,6 +13,14 @@ abstract class AuthRepository {
     String? branchId,
   });
 
+  Future<UserEntity?> registerOwner({
+    required String email,
+    required String password,
+    required String companyId,
+    required String name,
+    required String branchId,
+  });
+
   Future<void> updateUser({
     required String userId,
     required String name,

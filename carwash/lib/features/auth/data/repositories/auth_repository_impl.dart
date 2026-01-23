@@ -116,6 +116,46 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<UserEntity?> registerOwner({
+    required String email,
+    required String password,
+    required String companyId,
+    required String name,
+    required String branchId,
+  }) async {
+    try {
+      // 1. Create User in Main Auth Instance (Logs in automatically)
+      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (credential.user == null) {
+        throw Exception('Failed to create user');
+      }
+
+      final uid = credential.user!.uid;
+
+      // 2. Create User Model
+      final newUser = UserModel(
+        id: uid,
+        email: email,
+        companyId: companyId,
+        role: 'admin',
+        name: name,
+        branchId: branchId,
+      );
+
+      // 3. Save to Firestore (Now authorized because we are logged in)
+      await _firestore.collection('usuarios').doc(uid).set(newUser.toMap());
+
+      return newUser;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  @override
   Future<void> updateUser({
     required String userId,
     required String name,

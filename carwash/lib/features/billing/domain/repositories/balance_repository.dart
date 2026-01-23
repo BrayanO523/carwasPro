@@ -6,13 +6,22 @@ import '../entities/fiscal_config.dart';
 
 abstract class BalanceRepository {
   Future<void> saveInvoice(Invoice invoice);
-  Future<List<Invoice>> getInvoices(
+  Future<PaginatedInvoices> getInvoices(
     String companyId, {
     DateTime? startDate,
     DateTime? endDate,
+    int limit = 20,
+    DocumentSnapshot? startAfter,
   });
   Future<FiscalConfig?> getFiscalConfig(String companyId, String? branchId);
   Future<void> saveFiscalConfig(FiscalConfig config);
+}
+
+class PaginatedInvoices {
+  final List<Invoice> items;
+  final DocumentSnapshot? lastDocument;
+
+  PaginatedInvoices(this.items, this.lastDocument);
 }
 
 class BalanceRepositoryImpl implements BalanceRepository {
@@ -52,10 +61,12 @@ class BalanceRepositoryImpl implements BalanceRepository {
   }
 
   @override
-  Future<List<Invoice>> getInvoices(
+  Future<PaginatedInvoices> getInvoices(
     String companyId, {
     DateTime? startDate,
     DateTime? endDate,
+    int limit = 20,
+    DocumentSnapshot? startAfter,
   }) async {
     Query query = _firestore
         .collection('facturas')
@@ -83,8 +94,22 @@ class BalanceRepositoryImpl implements BalanceRepository {
       );
     }
 
+    if (startAfter != null) {
+      query = query.startAfterDocument(startAfter);
+    }
+
+    // Fetch limit + 1 to check if there are more
+    query = query.limit(limit);
+
     final snapshot = await query.get();
-    return snapshot.docs.map((doc) => InvoiceModel.fromFirestore(doc)).toList();
+    final items = snapshot.docs
+        .map((doc) => InvoiceModel.fromFirestore(doc))
+        .toList();
+
+    return PaginatedInvoices(
+      items,
+      snapshot.docs.isNotEmpty ? snapshot.docs.last : null,
+    );
   }
 
   @override
