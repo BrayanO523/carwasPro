@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../../domain/repositories/company_repository.dart';
 import '../../data/models/company_model.dart';
+import 'package:carwash/features/wash_types/domain/repositories/wash_type_repository.dart';
 
 class CompanyRegistrationProvider extends ChangeNotifier {
   final CompanyRepository _companyRepository;
   final AuthRepository _authRepository;
   final BranchRepository _branchRepository;
+  final WashTypeRepository _washTypeRepository;
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -29,9 +31,11 @@ class CompanyRegistrationProvider extends ChangeNotifier {
     required CompanyRepository companyRepository,
     required AuthRepository authRepository,
     required BranchRepository branchRepository,
+    required WashTypeRepository washTypeRepository,
   }) : _companyRepository = companyRepository,
        _authRepository = authRepository,
-       _branchRepository = branchRepository;
+       _branchRepository = branchRepository,
+       _washTypeRepository = washTypeRepository;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -42,10 +46,21 @@ class CompanyRegistrationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Generate Company ID
+      // 1. Generate IDs
       final companyId = const Uuid().v4();
+      final mainBranchId = const Uuid().v4();
 
-      // 2. Create Company Entity
+      // 2. Create User FIRST (Signs in automatically)
+      // This ensures we are authenticated for subsequent Firestore writes
+      await _authRepository.registerOwner(
+        email: adminEmailController.text.trim(),
+        password: adminPasswordController.text.trim(),
+        companyId: companyId,
+        name: adminNameController.text.trim(),
+        branchId: mainBranchId,
+      );
+
+      // 3. Create Company Entity
       final newCompany = CompanyModel(
         id: companyId,
         name: companyNameController.text.trim(),
@@ -56,11 +71,10 @@ class CompanyRegistrationProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
 
-      // 3. Save Company to Firestore
+      // 4. Save Company to Firestore (Authorized: isSignedIn)
       await _companyRepository.registerCompany(newCompany);
 
-      // 3b. Create Main Branch
-      final mainBranchId = const Uuid().v4();
+      // 5. Create Main Branch (Authorized: isSameCompany -> check User.companyId)
       final mainBranch = BranchModel(
         id: mainBranchId,
         name: 'Sucursal Principal',
@@ -70,15 +84,8 @@ class CompanyRegistrationProvider extends ChangeNotifier {
       );
       await _branchRepository.createBranch(mainBranch);
 
-      // 4. Create Admin User linked to this Company and Main Branch
-      await _authRepository.createCompanyUser(
-        email: adminEmailController.text.trim(),
-        password: adminPasswordController.text.trim(),
-        companyId: companyId,
-        name: adminNameController.text.trim(),
-        role: 'admin',
-        branchId: mainBranchId, // Assign admin to main branch
-      );
+      // 6. Seed Default Catalog
+      await _washTypeRepository.seedDefaultWashTypes(companyId, mainBranchId);
 
       _isLoading = false;
       notifyListeners();

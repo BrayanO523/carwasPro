@@ -91,6 +91,7 @@ class MyApp extends StatelessWidget {
             companyRepository: companyRepository,
             authRepository: authRepository,
             branchRepository: branchRepository,
+            washTypeRepository: washTypeRepository,
           ),
         ),
         ChangeNotifierProvider(
