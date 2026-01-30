@@ -1,6 +1,6 @@
 class Vehicle {
   final String id;
-  final String model;
+  // Removed model
   final String clientId;
   final String companyId;
   final DateTime entryDate;
@@ -19,9 +19,22 @@ class Vehicle {
   static const String statusWashed = 'washed';
   static const String statusFinished = 'finished';
 
+  static const List<String> types = [
+    'moto',
+    'trimoto',
+    'turismo',
+    'camioneta',
+    'pick_up',
+    'microbus',
+    'camion',
+    'autobus',
+    'cabezal',
+    'otro',
+  ];
+
   Vehicle({
     required this.id,
-    required this.model,
+    // required this.model, // Removed
     required this.clientId,
     required this.companyId,
     required this.entryDate,

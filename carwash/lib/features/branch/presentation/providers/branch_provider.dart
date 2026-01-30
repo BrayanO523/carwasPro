@@ -40,11 +40,12 @@ class BranchProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> addBranch({
+  Future<Branch?> addBranch({
     required String name,
     required String address,
     required String phone,
     required String companyId,
+    String establishmentNumber = '000',
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -57,10 +58,49 @@ class BranchProvider extends ChangeNotifier {
         address: address,
         phone: phone,
         companyId: companyId,
+        establishmentNumber: establishmentNumber,
       );
 
       await _repository.createBranch(newBranch);
       _branches.add(newBranch);
+      return newBranch;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateBranch({
+    required String id,
+    required String name,
+    required String address,
+    required String phone,
+    required String companyId,
+    String establishmentNumber = '000',
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final updatedBranch = BranchModel(
+        id: id,
+        name: name,
+        address: address,
+        phone: phone,
+        companyId: companyId,
+        establishmentNumber: establishmentNumber,
+      );
+
+      await _repository.updateBranch(updatedBranch);
+
+      final index = _branches.indexWhere((b) => b.id == id);
+      if (index != -1) {
+        _branches[index] = updatedBranch;
+      }
       return true;
     } catch (e) {
       _errorMessage = e.toString();

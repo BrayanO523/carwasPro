@@ -24,6 +24,11 @@ class Invoice {
   final DateTime createdAt;
   final String invoiceNumber;
   final String documentType; // 'invoice' or 'receipt'
+  final String? cai; // To track which CAI was used
+  final DateTime? caiDeadline;
+  final int? rangeMin;
+  final int? rangeMax;
+  final int? sequenceNumber; // Specific sequence used
 
   Invoice({
     required this.id,
@@ -45,5 +50,10 @@ class Invoice {
     required this.createdAt,
     required this.invoiceNumber,
     required this.documentType,
+    this.cai,
+    this.caiDeadline,
+    this.rangeMin,
+    this.rangeMax,
+    this.sequenceNumber,
   });
 }

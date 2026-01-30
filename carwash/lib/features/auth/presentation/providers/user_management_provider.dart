@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../../branch/domain/repositories/branch_repository.dart';
@@ -91,20 +93,20 @@ class UserManagementProvider extends ChangeNotifier {
       // Let's update AuthRepository interface to include `getCompanyUsers`.
 
       // WAIT: I can just use FirebaseFirestore.instance for now to list users.
-      print('Loading users for company: $companyId');
+      log('Loading users for company: $companyId');
       final snapshot = await FirebaseFirestore.instance
           .collection('usuarios')
           .where('empresa_id', isEqualTo: companyId)
           .get();
 
-      print('Found ${snapshot.docs.length} users');
+      log('Found ${snapshot.docs.length} users');
 
       _users = snapshot.docs
           .map((doc) => UserModel.fromFirestore(doc))
           .toList();
       notifyListeners();
     } catch (e) {
-      print('Error loading users: $e');
+      log('Error loading users: $e');
     }
   }
 
@@ -124,6 +126,24 @@ class UserManagementProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Calculate Emission Point for Admin users (Auto-increment)
+      // Calculate Emission Point for Admin users (Auto-increment per Branch)
+      String? emissionPoint;
+      if (_selectedRole == 'admin') {
+        int maxEp = 0;
+
+        // Filter users by the selected branch
+        final branchUsers = _users.where((u) => u.branchId == selectedBranchId);
+
+        for (var user in branchUsers) {
+          if (user.emissionPoint != null) {
+            final ep = int.tryParse(user.emissionPoint!) ?? 0;
+            if (ep > maxEp) maxEp = ep;
+          }
+        }
+        emissionPoint = (maxEp + 1).toString().padLeft(3, '0');
+      }
+
       final newUser = await _authRepository.createCompanyUser(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
@@ -131,6 +151,7 @@ class UserManagementProvider extends ChangeNotifier {
         role: _selectedRole,
         companyId: companyId,
         branchId: selectedBranchId,
+        emissionPoint: emissionPoint,
       );
 
       _users.add(newUser);
@@ -154,6 +175,7 @@ class UserManagementProvider extends ChangeNotifier {
     required String name,
     required String? branchId,
     required String companyId,
+    String? emissionPoint,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -164,6 +186,7 @@ class UserManagementProvider extends ChangeNotifier {
         userId: userId,
         name: name,
         branchId: branchId,
+        emissionPoint: emissionPoint,
       );
 
       // Reload users to reflect changes

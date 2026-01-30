@@ -4,38 +4,40 @@ import '../../domain/entities/client.dart';
 class ClientModel extends Client {
   ClientModel({
     required super.id,
-    required super.name,
-    required super.lastName,
+    required super.fullName,
     required super.phone,
+    required super.companyId,
     super.rtn,
     super.address,
     super.email,
-    required super.companyId,
+    super.branchId,
   });
 
   factory ClientModel.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return ClientModel(
       id: doc.id,
-      name: data['nombre'] ?? '',
-      lastName: data['apellido'] ?? '',
+      fullName:
+          data['nombre_completo'] ??
+          '${data['nombre']} ${data['apellido']}'.trim(),
       phone: data['telefono'] ?? '',
+      companyId: data['empresa_id'] ?? '',
       rtn: data['rtn'],
       address: data['direccion'],
       email: data['email'],
-      companyId: data['empresa_id'] ?? '',
+      branchId: data['sucursal_id'],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'nombre': name,
-      'apellido': lastName,
+      'nombre_completo': fullName,
       'telefono': phone,
+      'empresa_id': companyId,
       'rtn': rtn,
       'direccion': address,
       'email': email,
-      'empresa_id': companyId,
+      'sucursal_id': branchId,
     };
   }
 }

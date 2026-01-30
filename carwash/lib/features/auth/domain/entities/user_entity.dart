@@ -5,6 +5,8 @@ class UserEntity {
   final String role; // 'admin', 'employee'
   final String name;
   final String? branchId;
+  final String? emissionPoint;
+  final bool isFirstLogin;
 
   UserEntity({
     required this.id,
@@ -13,5 +15,7 @@ class UserEntity {
     required this.role,
     required this.name,
     this.branchId,
+    this.emissionPoint,
+    this.isFirstLogin = true,
   });
 }

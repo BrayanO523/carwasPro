@@ -5,6 +5,10 @@ import 'package:intl/intl.dart';
 import '../providers/balance_provider.dart';
 import '../../domain/entities/invoice.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../branch/presentation/providers/branch_provider.dart';
+import '../../../branch/domain/entities/branch.dart';
+
+import '../widgets/balance_filter_sheet.dart';
 
 class BalanceScreen extends StatefulWidget {
   const BalanceScreen({super.key});
@@ -17,8 +21,13 @@ class _BalanceScreenState extends State<BalanceScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
-  DateTimeRange? _dateRange;
+
+  DateTime? _startDate;
+  DateTime? _endDate;
+
   final ScrollController _scrollController = ScrollController();
+  String? _documentTypeFilter; // Document Type Filter ('invoice' or 'receipt')
+  String? _branchFilter; // Branch Filter
 
   @override
   void initState() {
@@ -52,10 +61,47 @@ class _BalanceScreenState extends State<BalanceScreen>
     if (companyId != null) {
       await context.read<BalanceProvider>().loadInvoices(
         companyId,
-        startDate: _dateRange?.start,
-        endDate: _dateRange?.end,
+        startDate: _startDate,
+        endDate: _endDate,
+        documentType: _documentTypeFilter,
+        branchId: _branchFilter,
       );
     }
+  }
+
+  void _showFilterDialog() {
+    final authProvider = context.read<AuthProvider>();
+    final companyId = authProvider.currentUser?.companyId;
+
+    if (companyId != null) {
+      context.read<BranchProvider>().loadBranches(companyId);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Consumer2<BranchProvider, BalanceProvider>(
+        builder: (context, branchPrv, balancePrv, _) {
+          return BalanceFilterSheet(
+            currentDateStart: _startDate,
+            currentDateEnd: _endDate,
+            currentBranchId: _branchFilter,
+            currentDocumentType: _documentTypeFilter,
+            branches: branchPrv.branches,
+            onApply: (start, end, branchId, documentType) {
+              setState(() {
+                _startDate = start;
+                _endDate = end;
+                _branchFilter = branchId;
+                _documentTypeFilter = documentType;
+              });
+              _loadData();
+            },
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -86,102 +132,83 @@ class _BalanceScreenState extends State<BalanceScreen>
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Row(
+          child: Column(
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar por Cliente o No. Factura',
-                    prefixIcon: Icon(Icons.search),
-                  ),
-                  onChanged: (val) {
-                    context.read<BalanceProvider>().setSearchText(val);
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Filter Buttons
               Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.calendar_today_outlined, size: 20),
-                    tooltip: 'Desde',
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _dateRange?.start ?? DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          final end = _dateRange?.end ?? DateTime.now();
-                          // Ensure start is before end
-                          if (picked.isAfter(end)) {
-                            _dateRange = DateTimeRange(
-                              start: picked,
-                              end: picked,
-                            );
-                          } else {
-                            _dateRange = DateTimeRange(start: picked, end: end);
-                          }
-                        });
-                        _loadData();
-                      }
-                    },
-                  ),
-                  if (_dateRange?.start != null)
-                    Text(
-                      DateFormat('dd/MM').format(_dateRange!.start),
-                      style: const TextStyle(fontSize: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar por Cliente o No. Factura',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (val) {
+                        context.read<BalanceProvider>().setSearchText(val);
+                      },
                     ),
-                  const Text(' - '),
+                  ),
+                  const SizedBox(width: 8),
+                  // Filter Button
                   IconButton(
-                    icon: const Icon(Icons.event_available_outlined, size: 20),
-                    tooltip: 'Hasta',
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _dateRange?.end ?? DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
-                      );
-                      if (picked != null) {
+                    icon: const Icon(Icons.filter_list, color: Colors.blueGrey),
+                    tooltip: 'Filtros Avanzados',
+                    onPressed: _showFilterDialog,
+                  ),
+                  if (_startDate != null ||
+                      _endDate != null ||
+                      _documentTypeFilter != null ||
+                      _branchFilter != null)
+                    IconButton(
+                      icon: const Icon(Icons.clear, color: Colors.red),
+                      tooltip: 'Limpiar Filtros',
+                      onPressed: () {
                         setState(() {
-                          final start = _dateRange?.start ?? DateTime.now();
-                          // Ensure end is after start
-                          if (picked.isBefore(start)) {
-                            _dateRange = DateTimeRange(
-                              start: picked,
-                              end: picked,
-                            );
-                          } else {
-                            _dateRange = DateTimeRange(
-                              start: start,
-                              end: picked,
-                            );
-                          }
+                          _startDate = null;
+                          _endDate = null;
+                          _documentTypeFilter = null;
+                          _branchFilter = null;
                         });
                         _loadData();
-                      }
-                    },
-                  ),
-                  if (_dateRange?.end != null)
-                    Text(
-                      DateFormat('dd/MM').format(_dateRange!.end),
-                      style: const TextStyle(fontSize: 12),
+                      },
                     ),
                 ],
               ),
-              if (_dateRange != null)
-                IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.red),
-                  tooltip: 'Limpiar Filtro',
-                  onPressed: () {
-                    setState(() => _dateRange = null);
-                    _loadData();
-                  },
+              // Filter Chips
+              if (_startDate != null ||
+                  _endDate != null ||
+                  _documentTypeFilter != null ||
+                  _branchFilter != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Row(
+                    children: [
+                      if (_startDate != null || _endDate != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Chip(
+                            label: Text(
+                              '${_startDate != null ? DateFormat('dd/MM').format(_startDate!) : '...'} - ${_endDate != null ? DateFormat('dd/MM').format(_endDate!) : '...'}',
+                            ),
+                            backgroundColor: Colors.blue.shade50,
+                          ),
+                        ),
+                      if (_documentTypeFilter != null)
+                        Chip(
+                          label: Text(
+                            _documentTypeFilter == 'invoice'
+                                ? 'Facturación'
+                                : 'Recibos',
+                          ),
+                          backgroundColor: Colors.orange.shade50,
+                        ),
+                      if (_branchFilter != null)
+                        Chip(
+                          label: const Text('Sucursal: Filtrada'),
+                          backgroundColor: Colors.purple.shade50,
+                        ),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -306,7 +333,58 @@ class _BalanceScreenState extends State<BalanceScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Text('Periodo: ${_dateFormatRange(_dateRange)}'),
+                    Text('Periodo: ${_dateFormatRange(_startDate, _endDate)}'),
+                    if (_branchFilter != null ||
+                        _documentTypeFilter != null) ...[
+                      const SizedBox(height: 8),
+                      Builder(
+                        builder: (context) {
+                          final List<String> filters = [];
+                          if (_branchFilter != null) {
+                            // Try to find branch name
+                            final branches = context
+                                .read<BranchProvider>()
+                                .branches;
+                            final branch = branches.cast<Branch>().firstWhere(
+                              (b) => b.id == _branchFilter,
+                              orElse: () => Branch(
+                                id: '',
+                                name: 'Sucursal Info',
+                                companyId: '',
+                                address: '',
+                                phone: '',
+                              ),
+                            );
+                            filters.add(branch.name);
+                          }
+                          if (_documentTypeFilter != null) {
+                            filters.add(
+                              _documentTypeFilter == 'invoice'
+                                  ? 'Facturación (Fiscal)'
+                                  : 'Recibos (Balance)',
+                            );
+                          }
+                          return Column(
+                            children: filters
+                                .map(
+                                  (filter) => Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      filter,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        color: Colors.blueGrey,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          );
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -342,11 +420,11 @@ class _BalanceScreenState extends State<BalanceScreen>
     );
   }
 
-  String _dateFormatRange(DateTimeRange? range) {
-    if (range == null) return 'Todo el Historial';
-    final start = DateFormat('dd/MM/yy').format(range.start);
-    final end = DateFormat('dd/MM/yy').format(range.end);
-    return '$start - $end';
+  String _dateFormatRange(DateTime? start, DateTime? end) {
+    if (start == null && end == null) return 'Todo el Historial';
+    final s = start != null ? DateFormat('dd/MM/yy').format(start) : 'Inicio';
+    final e = end != null ? DateFormat('dd/MM/yy').format(end) : 'Hoy';
+    return '$s - $e';
   }
 
   void _showInvoiceDetailDialog(Invoice invoice) {

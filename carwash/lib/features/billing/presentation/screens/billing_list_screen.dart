@@ -59,7 +59,7 @@ class _BillingListScreenState extends State<BillingListScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Buscar por cliente, modelo o placa...',
+                hintText: 'Buscar por cliente o placa...',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -172,7 +172,7 @@ class _BillingVehicleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${vehicle.brand ?? ''} ${vehicle.model}'.trim(),
+                      (vehicle.brand ?? 'Vehículo').trim(),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,

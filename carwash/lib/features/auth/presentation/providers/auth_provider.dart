@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -50,7 +52,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       // 1. Fetch Company
       if (_companyRepository != null && user.companyId.isNotEmpty) {
-        final company = await _companyRepository!.getCompany(user.companyId);
+        final company = await _companyRepository.getCompany(user.companyId);
         _companyName = company?.name;
       }
 
@@ -58,7 +60,7 @@ class AuthProvider extends ChangeNotifier {
       // If user has a specific branchId, fetch it.
       if (_branchRepository != null) {
         if (user.branchId != null && user.branchId!.isNotEmpty) {
-          final branch = await _branchRepository!.getBranch(user.branchId!);
+          final branch = await _branchRepository.getBranch(user.branchId!);
           _branchName = branch?.name;
         } else {
           // Fallback: If no specific branch, and role is admin, maybe fetch the "Main" branch?
@@ -70,7 +72,7 @@ class AuthProvider extends ChangeNotifier {
           // Actually, earlier code in VehicleEntryProvider used 'main' as branchId.
           // Let's try to fetch branch 'main' first if branchId is null? OR check if user has 'main' branchId.
           // If branchId is null, we can try to fetch the first branch of the company.
-          final branches = await _branchRepository!.getBranches(user.companyId);
+          final branches = await _branchRepository.getBranches(user.companyId);
           if (branches.isNotEmpty) {
             // Heuristic: First branch created is usually main.
             // Or if one is named "Principal" or matches company address.
@@ -83,7 +85,7 @@ class AuthProvider extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      print('Error loading additional user info: $e');
+      log('Error loading additional user info: $e');
     }
   }
 
@@ -107,7 +109,21 @@ class AuthProvider extends ChangeNotifier {
       }
     } catch (e) {
       _isLoading = false;
-      _errorMessage = e.toString();
+      final errorString = e.toString().toLowerCase();
+
+      if (errorString.contains('user-not-found') ||
+          errorString.contains('wrong-password') ||
+          errorString.contains('invalid-credential') ||
+          errorString.contains('invalid-email')) {
+        _errorMessage = 'Correo o contraseña incorrectos';
+      } else if (errorString.contains('too-many-requests')) {
+        _errorMessage = 'Demasiados intentos. Intente más tarde.';
+      } else if (errorString.contains('network-request-failed')) {
+        _errorMessage = 'Error de conexión. Verifique su internet.';
+      } else {
+        _errorMessage = 'Ocurrió un error inesperado al iniciar sesión';
+      }
+
       notifyListeners();
       return false;
     }
@@ -119,5 +135,24 @@ class AuthProvider extends ChangeNotifier {
     _companyName = null;
     _branchName = null;
     notifyListeners();
+  }
+
+  Future<void> markFirstLoginComplete() async {
+    final user = _currentUser;
+    if (user != null) {
+      await _authRepository.markFirstLoginComplete(user.id);
+      // Optimistic update
+      // Requires creating a new UserEntity since fields are final
+      // Or just ignore since next fetch will have it.
+      // But for UI immediate reaction if we use a watcher, we might want to update local state.
+      // However, UserEntity is immutable. We can trigger a reload or manually construct new user.
+      // For now, let's just do nothing locally or fetch user again?
+      // Re-fetching might be overkill. Let's constructing new UserEntity.
+      // Actually, since this is a one-time flow on Home init, we don't necessarily need to update ui immediately
+      // EXCEPT that if we don't, and user reloads, it might show again if data isn't synced?
+      // Detailed implementation:
+      // _currentUser = _currentUser?.copyWith(isFirstLogin: false); // Need copyWith
+      // Let's just rely on backend update for now, or add copyWith to entity.
+    }
   }
 }

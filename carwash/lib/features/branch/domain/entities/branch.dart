@@ -4,6 +4,7 @@ class Branch {
   final String address;
   final String phone;
   final String companyId;
+  final String establishmentNumber;
 
   Branch({
     required this.id,
@@ -11,5 +12,6 @@ class Branch {
     required this.address,
     required this.phone,
     required this.companyId,
+    this.establishmentNumber = '000', // Default
   });
 }

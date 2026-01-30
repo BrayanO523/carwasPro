@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/branch_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import 'branch_fiscal_config_screen.dart';
+import 'package:go_router/go_router.dart';
 
 class BranchListScreen extends StatefulWidget {
   const BranchListScreen({super.key});
@@ -22,64 +24,6 @@ class _BranchListScreenState extends State<BranchListScreen> {
     });
   }
 
-  void _showAddBranchDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final addressController = TextEditingController();
-    final phoneController = TextEditingController();
-    final companyId = context.read<AuthProvider>().currentUser?.companyId;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nueva Sucursal'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Nombre'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: addressController,
-              decoration: const InputDecoration(labelText: 'Dirección'),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(labelText: 'Teléfono'),
-              keyboardType: TextInputType.phone,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (companyId != null &&
-                  nameController.text.isNotEmpty &&
-                  addressController.text.isNotEmpty) {
-                final success = await context.read<BranchProvider>().addBranch(
-                  name: nameController.text.trim(),
-                  address: addressController.text.trim(),
-                  phone: phoneController.text.trim(),
-                  companyId: companyId,
-                );
-                if (success && ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
-              }
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final branchProvider = context.watch<BranchProvider>();
@@ -90,7 +34,7 @@ class _BranchListScreenState extends State<BranchListScreen> {
         backgroundColor: Colors.transparent,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddBranchDialog(context),
+        onPressed: () => context.push('/branch-create'),
         backgroundColor: const Color(
           0xFFFBBF24,
         ), // Amber color matching home card
@@ -146,11 +90,28 @@ class _BranchListScreenState extends State<BranchListScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: ListTile(
+                            onTap: () {
+                              final companyId = context
+                                  .read<AuthProvider>()
+                                  .currentUser
+                                  ?.companyId;
+                              if (companyId != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => BranchFiscalConfigScreen(
+                                      companyId: companyId,
+                                      branch: branch,
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
                             contentPadding: const EdgeInsets.all(16),
                             leading: CircleAvatar(
                               backgroundColor: const Color(
                                 0xFFFBBF24,
-                              ).withOpacity(0.2),
+                              ).withValues(alpha: 0.2),
                               child: const Icon(
                                 Icons.store_rounded,
                                 color: Color(0xFFFBBF24),

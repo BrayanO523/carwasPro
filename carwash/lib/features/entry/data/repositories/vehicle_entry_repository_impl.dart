@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -27,8 +29,7 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
     } else {
       clientModel = ClientModel(
         id: client.id,
-        name: client.name,
-        lastName: client.lastName,
+        fullName: client.fullName,
         phone: client.phone,
         companyId: client.companyId,
         rtn: client.rtn,
@@ -52,7 +53,7 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
       }
       return null;
     } catch (e) {
-      print('Error getting client: $e');
+      log('Error getting client: $e');
       return null;
     }
   }
@@ -72,7 +73,7 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
       }
       return null;
     } catch (e) {
-      print('Error finding client: $e');
+      log('Error finding client: $e');
       return null;
     }
   }
@@ -92,10 +93,43 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
     required String branchId,
     required String clientId,
     required String vehicleId,
+    required String clientName,
+    required String vehicleType,
   }) async {
+    // 1. Fetch Company and Branch Names
+    String companyName = companyId;
+    String branchName = branchId;
+
+    try {
+      final companyDoc = await _firestore
+          .collection('empresas')
+          .doc(companyId)
+          .get();
+      if (companyDoc.exists) {
+        companyName = companyDoc.data()?['nombre'] ?? companyId;
+      }
+
+      final branchDoc = await _firestore
+          .collection('sucursales')
+          .doc(branchId)
+          .get();
+      if (branchDoc.exists) {
+        branchName = branchDoc.data()?['nombre'] ?? branchId;
+      }
+    } catch (e) {
+      log('Error fetching names for storage path: $e');
+    }
+
+    // 2. Sanitize Names
+    final safeCompany = _sanitizeName(companyName);
+    final safeBranch = _sanitizeName(branchName);
+    final safeClient = _sanitizeName(clientName);
+    final safeVehicleType = _sanitizeName(vehicleType);
     final fileName = path.basename(imageFile.path);
-    // Path structure: empresa/sucursal/cliente/vehiculo/imagen.jpg
-    final storagePath = '$companyId/$branchId/$clientId/$vehicleId/$fileName';
+
+    // 3. Construct Path: company/branch/client/vehicleType/filename
+    final storagePath =
+        '$safeCompany/$safeBranch/$safeClient/$safeVehicleType/$fileName';
 
     // Compress Image
     final compressedFile = await ImageUtils.compressImage(imageFile);
@@ -105,6 +139,13 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
     final downloadUrl = await uploadTask.ref.getDownloadURL();
 
     return downloadUrl;
+  }
+
+  String _sanitizeName(String name) {
+    return name
+        .trim()
+        .replaceAll(RegExp(r'[^\w\s-]'), '') // Remove special chars
+        .replaceAll(RegExp(r'\s+'), '_'); // Replace spaces with underscore
   }
 
   @override
@@ -160,7 +201,7 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
       }
       return map;
     } catch (e) {
-      print('Error fetching wash types: $e');
+      log('Error fetching wash types: $e');
       return {};
     }
   }

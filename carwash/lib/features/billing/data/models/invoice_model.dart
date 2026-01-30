@@ -23,6 +23,11 @@ class InvoiceModel extends Invoice {
     required super.createdAt,
     required super.invoiceNumber,
     required super.documentType,
+    super.cai,
+    super.caiDeadline,
+    super.rangeMin,
+    super.rangeMax,
+    super.sequenceNumber,
   });
 
   factory InvoiceModel.fromFirestore(DocumentSnapshot doc) {
@@ -55,6 +60,13 @@ class InvoiceModel extends Invoice {
       createdAt: (data['fecha_creacion'] as Timestamp).toDate(),
       invoiceNumber: data['numero_factura'] ?? '',
       documentType: data['tipo_documento'] ?? 'invoice',
+      cai: data['cai'],
+      caiDeadline: data['fecha_limite_emision'] != null
+          ? (data['fecha_limite_emision'] as Timestamp).toDate()
+          : null,
+      rangeMin: data['rango_inicial'],
+      rangeMax: data['rango_final'],
+      sequenceNumber: data['secuencia_asignada'],
     );
   }
 
@@ -89,6 +101,13 @@ class InvoiceModel extends Invoice {
       'fecha_creacion': Timestamp.fromDate(createdAt),
       'numero_factura': invoiceNumber,
       'tipo_documento': documentType,
+      'cai': cai,
+      'fecha_limite_emision': caiDeadline != null
+          ? Timestamp.fromDate(caiDeadline!)
+          : null,
+      'rango_inicial': rangeMin,
+      'rango_final': rangeMax,
+      'secuencia_asignada': sequenceNumber,
     };
   }
 }

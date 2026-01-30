@@ -1,10 +1,13 @@
+import 'dart:developer';
+
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart'; // Restored
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../domain/repositories/vehicle_entry_repository.dart';
-import '../../../wash_types/domain/repositories/wash_type_repository.dart'; // Correct relative path from features/entry/presentation/providers/
+import '../../../wash_types/domain/repositories/wash_type_repository.dart';
+import '../../../wash_types/domain/entities/wash_type.dart';
 import '../../domain/entities/vehicle.dart';
 import '../../data/models/client_model.dart';
 import '../../data/models/vehicle_model.dart';
@@ -14,34 +17,34 @@ class VehicleEntryProvider extends ChangeNotifier {
   final WashTypeRepository _washTypeRepository;
 
   // Form Controllers
-  final nameController = TextEditingController();
-  final lastNameController = TextEditingController();
+  final nameController = TextEditingController(); // Stores "Full Name"
   final phoneController = TextEditingController();
-  final modelController = TextEditingController();
+  // final modelController = TextEditingController(); // Removed
+  final customTypeController =
+      TextEditingController(); // For "Otro" manual input
 
   // State
-  List<File> _selectedImages = [];
+  final List<File> _selectedImages = [];
   bool _isLoading = false;
   String? _errorMessage;
 
-  List<Map<String, dynamic>> _washTypes = [];
+  List<WashType> _washTypes = [];
   String _selectedVehicleType = 'turismo'; // Default
   String? _selectedBaseServiceId;
   final Set<String> _selectedExtrasIds = {};
 
-  final List<String> vehicleTypes = ['moto', 'turismo', 'camioneta', 'grande'];
+  final List<String> vehicleTypes = Vehicle.types; // Use centralized list
 
   VehicleEntryProvider({
     required VehicleEntryRepository repository,
     required WashTypeRepository washTypeRepository,
   }) : _repository = repository,
        _washTypeRepository = washTypeRepository;
-  // _loadWashTypes(); // Now called explicitly from UI
 
   List<File> get selectedImages => _selectedImages;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  List<Map<String, dynamic>> get washTypes => _washTypes;
+  List<WashType> get washTypes => _washTypes; // Exposed as Entity List
   String get selectedVehicleType => _selectedVehicleType;
   String? get selectedBaseServiceId => _selectedBaseServiceId;
   Set<String> get selectedExtrasIds => _selectedExtrasIds;
@@ -50,46 +53,31 @@ class VehicleEntryProvider extends ChangeNotifier {
 
   // Subscribe to wash types for Real-time updates
   void subscribeToWashTypes(String companyId, String branchId) {
-    // Cancel previous subscription if any
     _washTypeSubscription?.cancel();
 
     _washTypeSubscription = _washTypeRepository
         .getWashTypesStream(companyId: companyId)
         .listen(
           (allTypes) {
-            // 2. Filter by Active and Branch Availability
+            // Filter by Active and Branch Availability
             final filtered = allTypes.where((type) {
               if (!type.isActive) return false;
-
-              // Branch Check: Empty = All. Or must contain current branchId.
               if (type.branchIds.isEmpty) return true;
               return type.branchIds.contains(branchId);
             }).toList();
 
-            // 3. Convert to Map for current UI compatibility
-            _washTypes = filtered.map((e) {
-              return {
-                'id': e.id,
-                'nombre': e.name,
-                'descripcion': e.description,
-                'categoria': e.category,
-                'activo': e.isActive,
-                'precios': e.prices,
-                'empresa_id': e.companyId,
-                'sucursal_ids': e.branchIds,
-              };
-            }).toList();
+            _washTypes = filtered;
 
             // Select first base service by default if available and nothing selected
             final baseServices = _washTypes
-                .where((w) => w['categoria'] == 'base')
+                .where((w) => w.category == 'base')
                 .toList();
 
             // Ensure current selection is still valid, else reset
             if (_selectedBaseServiceId == null ||
-                !baseServices.any((x) => x['id'] == _selectedBaseServiceId)) {
+                !baseServices.any((x) => x.id == _selectedBaseServiceId)) {
               if (baseServices.isNotEmpty) {
-                _selectedBaseServiceId = baseServices.first['id'];
+                _selectedBaseServiceId = baseServices.first.id;
               } else {
                 _selectedBaseServiceId = null;
               }
@@ -98,12 +86,14 @@ class VehicleEntryProvider extends ChangeNotifier {
             notifyListeners();
           },
           onError: (e) {
-            print('Error loading wash types stream: $e');
+            log('Error loading wash types stream: $e');
             _errorMessage = 'Error de conexión con servicios: $e';
             notifyListeners();
           },
         );
   }
+
+  // ... setters remain same ...
 
   void setVehicleType(String type) {
     _selectedVehicleType = type;
@@ -124,11 +114,9 @@ class VehicleEntryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> pickImage() async {
+  Future<void> pickImage({ImageSource source = ImageSource.camera}) async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-    ); // Or camera
+    final pickedFile = await picker.pickImage(source: source, imageQuality: 50);
     if (pickedFile != null) {
       _selectedImages.add(File(pickedFile.path));
       notifyListeners();
@@ -142,12 +130,16 @@ class VehicleEntryProvider extends ChangeNotifier {
 
   Future<bool> submitEntry(String companyId, {String? branchId}) async {
     if (nameController.text.isEmpty ||
-        lastNameController.text.isEmpty ||
-        modelController.text.isEmpty ||
         _selectedImages.isEmpty ||
         _selectedBaseServiceId == null) {
       _errorMessage =
           'Por favor complete todos los campos, seleccione un lavado y añada al menos una foto';
+      notifyListeners();
+      return false;
+    }
+
+    if (_selectedVehicleType == 'otro' && customTypeController.text.isEmpty) {
+      _errorMessage = 'Por favor especifique el tipo de vehículo';
       notifyListeners();
       return false;
     }
@@ -157,9 +149,10 @@ class VehicleEntryProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Check for existing client
       String clientId;
       ClientModel client;
+      String fullName = nameController.text.trim();
+      final effectiveBranchId = branchId ?? 'main';
 
       final existingClient = await _repository.getClientByPhone(
         phoneController.text.trim(),
@@ -170,59 +163,59 @@ class VehicleEntryProvider extends ChangeNotifier {
         clientId = existingClient.id;
         client = ClientModel(
           id: clientId,
-          name: nameController.text.trim(),
-          lastName: lastNameController.text.trim(),
+          fullName: fullName,
           phone: phoneController.text.trim(),
           companyId: companyId,
+          branchId: effectiveBranchId,
         );
       } else {
         clientId = const Uuid().v4();
         client = ClientModel(
           id: clientId,
-          name: nameController.text.trim(),
-          lastName: lastNameController.text.trim(),
+          fullName: fullName,
           phone: phoneController.text.trim(),
           companyId: companyId,
+          branchId: effectiveBranchId,
         );
       }
 
-      // 2. Save/Update Client
       await _repository.saveClient(client);
 
       final vehicleId = const Uuid().v4();
-      final effectiveBranchId = branchId ?? 'main';
-
-      // 3. Upload Images
-      List<String> photoUrls = [];
-      for (var image in _selectedImages) {
-        final url = await _repository.uploadVehicleImage(
+      final uploadTasks = _selectedImages.map((image) {
+        return _repository.uploadVehicleImage(
           imageFile: image,
           companyId: companyId,
           branchId: effectiveBranchId,
           clientId: clientId,
           vehicleId: vehicleId,
+          clientName: fullName,
+          vehicleType: _selectedVehicleType,
         );
-        photoUrls.add(url);
-      }
+      });
 
-      // Collect Services
+      final photoUrls = await Future.wait(uploadTasks);
+
       List<String> selectedServices = [];
-      if (_selectedBaseServiceId != null)
+      if (_selectedBaseServiceId != null) {
         selectedServices.add(_selectedBaseServiceId!);
+      }
       selectedServices.addAll(_selectedExtrasIds);
 
-      // 4. Save Vehicle
+      final finalVehicleType = _selectedVehicleType == 'otro'
+          ? customTypeController.text.trim()
+          : _selectedVehicleType;
+
       final vehicle = VehicleModel(
         id: vehicleId,
-        model: modelController.text.trim(),
         clientId: clientId,
         companyId: companyId,
         entryDate: DateTime.now(),
         photoUrls: photoUrls,
-        status: Vehicle.statusWashing, // Use constant
+        status: Vehicle.statusWashing,
         branchId: effectiveBranchId,
-        clientName: '${client.name} ${client.lastName}', // Use client object
-        vehicleType: _selectedVehicleType,
+        clientName: fullName,
+        vehicleType: finalVehicleType,
         services: selectedServices,
       );
       await _repository.saveVehicle(vehicle);
@@ -240,9 +233,8 @@ class VehicleEntryProvider extends ChangeNotifier {
 
   void clearForm() {
     nameController.clear();
-    lastNameController.clear();
     phoneController.clear();
-    modelController.clear();
+    customTypeController.clear();
     _selectedImages.clear();
     _selectedBaseServiceId = null;
     _selectedExtrasIds.clear();
@@ -254,32 +246,64 @@ class VehicleEntryProvider extends ChangeNotifier {
   // Price Calculations
   double get subtotal {
     double total = 0;
+    final lookupType = _selectedVehicleType;
 
     // Base Service Price
     if (_selectedBaseServiceId != null) {
-      final service = _washTypes.firstWhere(
-        (w) => w['id'] == _selectedBaseServiceId,
-        orElse: () => {},
-      );
-      if (service.isNotEmpty) {
-        final priceMap = service['precios'] as Map<String, dynamic>?;
-        total += (priceMap?[_selectedVehicleType] ?? 0).toDouble();
+      final service = _getWashTypeById(_selectedBaseServiceId!);
+      if (service != null) {
+        total += service.getPriceFor(lookupType);
       }
     }
 
     // Extras Prices
     for (final extraId in _selectedExtrasIds) {
-      final service = _washTypes.firstWhere(
-        (w) => w['id'] == extraId,
-        orElse: () => {},
-      );
-      if (service.isNotEmpty) {
-        final priceMap = service['precios'] as Map<String, dynamic>?;
-        total += (priceMap?[_selectedVehicleType] ?? 0).toDouble();
+      final service = _getWashTypeById(extraId);
+      if (service != null) {
+        total += service.getPriceFor(lookupType);
       }
     }
 
     return total;
+  }
+
+  WashType? _getWashTypeById(String id) {
+    try {
+      return _washTypes.firstWhere((w) => w.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Helper for UI: Get Price Logic
+  double getPrice(String serviceId) {
+    final service = _getWashTypeById(serviceId);
+    if (service == null) return 0.0;
+    return service.getPriceFor(_selectedVehicleType);
+  }
+
+  // Helper for UI: Summary Logic
+  String getServiceSummary({required bool isEmployee}) {
+    if (_selectedBaseServiceId == null) return '';
+
+    final base = _getWashTypeById(_selectedBaseServiceId!);
+    if (base == null) return '';
+
+    String text = base.name;
+    if (!isEmployee) {
+      text += ' (L. ${getPrice(base.id).toStringAsFixed(2)})';
+    }
+
+    for (final extraId in _selectedExtrasIds) {
+      final extra = _getWashTypeById(extraId);
+      if (extra != null) {
+        text += '\n+ ${extra.name}';
+        if (!isEmployee) {
+          text += ' (L. ${getPrice(extra.id).toStringAsFixed(2)})';
+        }
+      }
+    }
+    return text;
   }
 
   double get isv => subtotal * 0.15;
@@ -289,9 +313,10 @@ class VehicleEntryProvider extends ChangeNotifier {
   void dispose() {
     _washTypeSubscription?.cancel();
     nameController.dispose();
-    lastNameController.dispose();
+
     phoneController.dispose();
-    modelController.dispose();
+    // modelController.dispose(); // Removed
+    customTypeController.dispose();
     super.dispose();
   }
 }

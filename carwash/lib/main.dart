@@ -1,5 +1,7 @@
 import 'package:carwash/features/auth/presentation/screens/user_list_screen.dart';
+import 'package:carwash/features/auth/presentation/screens/user_create_screen.dart';
 import 'package:carwash/features/branch/presentation/screens/branch_list_screen.dart';
+import 'package:carwash/features/branch/presentation/screens/branch_create_screen.dart';
 import 'package:carwash/features/entry/presentation/screens/active_vehicles_screen.dart';
 import 'package:carwash/features/entry/presentation/screens/vehicle_entry_screen.dart';
 import 'package:carwash/features/billing/presentation/providers/billing_provider.dart';
@@ -18,6 +20,7 @@ import 'firebase_options.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/company/presentation/screens/company_registration_screen.dart';
 import 'features/home/presentation/screens/home_screen.dart';
+import 'features/home/presentation/screens/data_inspector_screen.dart';
 
 // Repositories
 import 'features/auth/data/repositories/auth_repository_impl.dart';
@@ -37,6 +40,7 @@ import 'features/entry/presentation/providers/vehicle_entry_provider.dart';
 import 'features/branch/presentation/providers/branch_provider.dart';
 import 'features/auth/presentation/providers/user_management_provider.dart';
 import 'features/entry/presentation/providers/active_vehicles_provider.dart';
+import 'features/home/presentation/providers/data_inspector_provider.dart';
 
 // import 'core/utils/wash_types_seeder.dart'; // Removed
 import 'features/billing/domain/repositories/balance_repository.dart';
@@ -48,6 +52,12 @@ import 'features/wash_types/presentation/providers/wash_type_provider.dart';
 import 'features/wash_types/presentation/screens/wash_type_list_screen.dart';
 import 'features/wash_types/presentation/screens/wash_type_form_screen.dart';
 import 'features/wash_types/domain/entities/wash_type.dart';
+
+import 'features/products/data/repositories/product_repository_impl.dart';
+import 'features/products/domain/repositories/product_repository.dart';
+import 'features/products/presentation/providers/product_provider.dart';
+import 'features/products/presentation/screens/product_form_screen.dart';
+import 'features/products/domain/entities/product.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,6 +78,7 @@ class MyApp extends StatelessWidget {
     final vehicleEntryRepository = VehicleEntryRepositoryImpl();
     final branchRepository = BranchRepositoryImpl();
     final washTypeRepository = WashTypeRepositoryImpl();
+    final productRepository = ProductRepositoryImpl();
 
     return MultiProvider(
       providers: [
@@ -130,6 +141,13 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => WashTypeProvider(repository: washTypeRepository),
         ),
+
+        // Products Feature
+        Provider<ProductRepository>.value(value: productRepository),
+        ChangeNotifierProvider(
+          create: (_) => ProductProvider(repository: productRepository),
+        ),
+        ChangeNotifierProvider(create: (_) => DataInspectorProvider()),
       ],
       child: const AppContent(),
     );
@@ -221,6 +239,29 @@ class AppContent extends StatelessWidget {
             return WashTypeFormScreen(washType: washType);
           },
         ),
+        GoRoute(
+          path: '/products/add',
+          builder: (context, state) => const ProductFormScreen(),
+        ),
+        GoRoute(
+          path: '/products/edit',
+          builder: (context, state) {
+            final product = state.extra as Product;
+            return ProductFormScreen(product: product);
+          },
+        ),
+        GoRoute(
+          path: '/branch-create',
+          builder: (context, state) => const BranchCreateScreen(),
+        ),
+        GoRoute(
+          path: '/user-create',
+          builder: (context, state) => const UserCreateScreen(),
+        ),
+        GoRoute(
+          path: '/data-inspector',
+          builder: (context, state) => const DataInspectorScreen(),
+        ),
       ],
     );
 
@@ -233,7 +274,6 @@ class AppContent extends StatelessWidget {
           seedColor: const Color(0xFF1E88E5), // Blue accent
           brightness: Brightness.light,
           surface: Colors.white,
-          background: const Color(0xFFF9FAFB), // Very soft grey/white (Gray 50)
         ),
         scaffoldBackgroundColor: const Color(
           0xFFF9FAFB,

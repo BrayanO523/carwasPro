@@ -6,8 +6,10 @@ import '../providers/active_vehicles_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import 'package:carwash/features/entry/domain/entities/vehicle.dart';
 // import 'package:url_launcher/url_launcher.dart'; // Removed: Moved to Provider
-import 'package:carwash/features/entry/domain/repositories/vehicle_entry_repository.dart';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/full_screen_image_viewer.dart';
+import 'package:quickalert/quickalert.dart';
 
 class ActiveVehiclesScreen extends StatefulWidget {
   const ActiveVehiclesScreen({super.key});
@@ -49,7 +51,6 @@ class _ActiveVehiclesScreenState extends State<ActiveVehiclesScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ActiveVehiclesProvider>();
-    final theme = Theme.of(context);
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -74,7 +75,7 @@ class _ActiveVehiclesScreenState extends State<ActiveVehiclesScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Buscar por cliente, modelo o placa...',
+                hintText: 'Buscar por cliente o placa...',
                 prefixIcon: const Icon(
                   Icons.search_rounded,
                   color: Colors.grey,
@@ -211,7 +212,7 @@ class _VehicleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${vehicle.brand ?? ''} ${vehicle.model}'.trim(),
+                      (vehicle.brand ?? 'Vehículo').trim(),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -250,84 +251,81 @@ class _VehicleCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('¿Terminar Lavado?'),
-                              content: Text(
-                                '¿El vehículo ${vehicle.brand ?? ''} ${vehicle.model} está listo para facturar?',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(context, false),
-                                  child: const Text('Cancelar'),
-                                ),
-                                FilledButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Confirmar'),
-                                ),
-                              ],
-                            ),
-                          );
+                    if (context.read<AuthProvider>().currentUser?.role ==
+                        'admin')
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            QuickAlert.show(
+                              context: context,
+                              type: QuickAlertType.confirm,
+                              title: '¿Terminar Lavado?',
+                              text:
+                                  '¿El vehículo ${vehicle.brand ?? ''} está listo para facturar?',
+                              confirmBtnText: 'Sí',
+                              cancelBtnText: 'Cancelar',
+                              confirmBtnColor: Colors.green,
+                              onConfirmBtnTap: () async {
+                                Navigator.pop(context); // Close Alert
+                                try {
+                                  final companyName =
+                                      context
+                                          .read<AuthProvider>()
+                                          .companyName ??
+                                      'CarWash';
+                                  await context
+                                      .read<ActiveVehiclesProvider>()
+                                      .completeWashAndNotify(
+                                        vehicle: vehicle,
+                                        companyName: companyName,
+                                      );
 
-                          if (confirm == true && context.mounted) {
-                            try {
-                              final companyName =
-                                  context.read<AuthProvider>().companyName ??
-                                  'CarWash';
-                              await context
-                                  .read<ActiveVehiclesProvider>()
-                                  .completeWashAndNotify(
-                                    vehicle: vehicle,
-                                    companyName: companyName,
-                                  );
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Vehículo marcado como lavado y notificado',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (!context.mounted) return;
 
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Vehículo marcado como lavado y notificado',
+                                  String message = 'Error: $e';
+                                  Color color = Colors.red;
+
+                                  if (e is NoPhoneException) {
+                                    message =
+                                        'El cliente no tiene teléfono registrado';
+                                  } else if (e is WhatsAppLaunchException) {
+                                    message =
+                                        'Esta persona no tiene WhatsApp (o el número es incorrecto)';
+                                  }
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(message),
+                                      backgroundColor: color,
                                     ),
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (!context.mounted) return;
-
-                              String message = 'Error: $e';
-                              Color color = Colors.red;
-
-                              if (e is NoPhoneException) {
-                                message =
-                                    'El cliente no tiene teléfono registrado';
-                              } else if (e is WhatsAppLaunchException) {
-                                message =
-                                    'Esta persona no tiene WhatsApp (o el número es incorrecto)';
-                              }
-
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(message),
-                                  backgroundColor: color,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.check_circle_outline, size: 18),
-                        label: const Text('Terminar y Avisar'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[50],
-                          foregroundColor: Colors.green[800],
-                          elevation: 0,
+                                  );
+                                }
+                              },
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.check_circle_outline,
+                            size: 18,
+                          ),
+                          label: const Text('Terminar y Avisar'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green[50],
+                            foregroundColor: Colors.green[800],
+                            elevation: 0,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -355,18 +353,31 @@ class _VehicleCard extends StatelessWidget {
                   child: PageView.builder(
                     itemCount: vehicle.photoUrls.length,
                     itemBuilder: (context, index) {
-                      return CachedNetworkImage(
-                        imageUrl: vehicle.photoUrls[index],
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: Colors.grey[200],
-                          child: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FullScreenImageViewer(
+                                photoUrls: vehicle.photoUrls,
+                                initialIndex: index,
+                              ),
+                            ),
+                          );
+                        },
+                        child: CachedNetworkImage(
+                          imageUrl: vehicle.photoUrls[index],
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            color: Colors.grey[200],
+                            child: const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          color: Colors.grey[200],
-                          child: const Icon(Icons.error, color: Colors.grey),
+                          errorWidget: (context, url, error) => Container(
+                            color: Colors.grey[200],
+                            child: const Icon(Icons.error, color: Colors.grey),
+                          ),
                         ),
                       );
                     },
@@ -391,7 +402,7 @@ class _VehicleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${vehicle.brand ?? ''} ${vehicle.model}'.trim(),
+                      (vehicle.brand ?? 'Vehículo').trim(),
                       style: GoogleFonts.outfit(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -511,7 +522,7 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(

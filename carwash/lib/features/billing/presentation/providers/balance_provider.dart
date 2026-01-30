@@ -1,6 +1,9 @@
+import 'dart:developer';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../domain/entities/invoice.dart';
+
 import '../../domain/repositories/balance_repository.dart';
 
 class BalanceProvider extends ChangeNotifier {
@@ -21,7 +24,7 @@ class BalanceProvider extends ChangeNotifier {
 
   // Balance Getters
   double get totalIncome =>
-      invoices.fold(0, (sum, item) => sum + item.totalAmount);
+      invoices.fold(0, (acc, item) => acc + item.totalAmount);
   int get totalInvoices => invoices.length;
 
   void setSearchText(String text) {
@@ -60,6 +63,8 @@ class BalanceProvider extends ChangeNotifier {
   String? _lastCompanyId;
   DateTime? _lastStartDate;
   DateTime? _lastEndDate;
+  String? _lastDocumentType; // Cache Document Type
+  String? _lastBranchId; // Cache Branch
 
   DocumentSnapshot? _lastDocument;
   bool _hasMore = true;
@@ -72,6 +77,8 @@ class BalanceProvider extends ChangeNotifier {
     String companyId, {
     DateTime? startDate,
     DateTime? endDate,
+    String? documentType,
+    String? branchId,
     bool forceRefresh = false,
   }) async {
     // Cache check if not forced and same params
@@ -79,6 +86,8 @@ class BalanceProvider extends ChangeNotifier {
         companyId == _lastCompanyId &&
         startDate == _lastStartDate &&
         endDate == _lastEndDate &&
+        documentType == _lastDocumentType &&
+        branchId == _lastBranchId &&
         _invoices.isNotEmpty) {
       return;
     }
@@ -87,6 +96,8 @@ class BalanceProvider extends ChangeNotifier {
     _lastCompanyId = companyId;
     _lastStartDate = startDate;
     _lastEndDate = endDate;
+    _lastDocumentType = documentType;
+    _lastBranchId = branchId;
     _lastDocument = null;
     _hasMore = true;
 
@@ -99,6 +110,8 @@ class BalanceProvider extends ChangeNotifier {
         companyId,
         startDate: startDate,
         endDate: endDate,
+        documentType: documentType,
+        branchId: branchId,
         limit: 20,
       );
 
@@ -123,8 +136,9 @@ class BalanceProvider extends ChangeNotifier {
     if (_isLoadingMore ||
         !_hasMore ||
         _lastCompanyId == null ||
-        _lastDocument == null)
+        _lastDocument == null) {
       return;
+    }
 
     try {
       _isLoadingMore = true;
@@ -134,6 +148,8 @@ class BalanceProvider extends ChangeNotifier {
         _lastCompanyId!,
         startDate: _lastStartDate,
         endDate: _lastEndDate,
+        documentType: _lastDocumentType,
+        branchId: _lastBranchId,
         limit: 20,
         startAfter: _lastDocument,
       );
@@ -153,7 +169,7 @@ class BalanceProvider extends ChangeNotifier {
     } catch (e) {
       _isLoadingMore = false;
       // Fail silently for load more, or show snackbar in UI
-      print('Error loading more invoices: $e');
+      log('Error loading more invoices: $e');
       notifyListeners();
     }
   }

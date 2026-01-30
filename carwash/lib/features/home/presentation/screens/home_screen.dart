@@ -6,6 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:carwash/features/entry/presentation/providers/active_vehicles_provider.dart';
 import 'package:carwash/features/billing/presentation/providers/billing_provider.dart';
 
+import 'package:carwash/features/home/presentation/screens/menu_screen.dart';
+import 'package:quickalert/quickalert.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -30,14 +33,54 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         context.read<BillingProvider>().init(user.companyId);
       }
+
+      // Show Welcome Alert if user is admin and first login
+      if (user != null &&
+          user.role == 'admin' &&
+          user.isFirstLogin == true &&
+          mounted) {
+        QuickAlert.show(
+          context: context,
+          type: QuickAlertType.info,
+          title: '¡Bienvenido!',
+          text:
+              'En el menú (tab), en la opción de Precios, puedes agregar los servicios y productos de tu Carwash.\n\nTambién puedes usar las ACCIONES RÁPIDAS en el menú para registrarlos más fácilmente.',
+          confirmBtnText: 'Entendido',
+          confirmBtnColor: const Color(0xFF1E88E5),
+          onConfirmBtnTap: () async {
+            Navigator.pop(context); // Close alert
+            await context.read<AuthProvider>().markFirstLoginComplete();
+          },
+        );
+      }
     });
+  }
+
+  Future<void> _refreshData() async {
+    final authProvider = context.read<AuthProvider>();
+    final user = authProvider.currentUser;
+    if (user != null) {
+      // Refresh Active Vehicles (Counters)
+      context.read<ActiveVehiclesProvider>().init(
+        user.companyId,
+        branchId: (user.branchId != null && user.branchId!.isNotEmpty)
+            ? user.branchId
+            : null,
+        force:
+            true, // Ensure force refresh if supported, or just init usually resets streams/listeners
+      );
+      // Refresh Billing (Counters)
+      context.read<BillingProvider>().init(user.companyId, force: true);
+
+      // Wait a bit to ensure UI updates if needed, though providers notify listeners.
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
-    final theme = Theme.of(context);
 
     // Modern Color Palette
     final cardColors = [
@@ -56,149 +99,86 @@ class _HomeScreenState extends State<HomeScreen> {
     final readyToBillCount = context.watch<BillingProvider>().vehicles.length;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Very light grey/white background
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        // ... (AppBar content unchanged)
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: false,
-        title: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (authProvider.companyName != null)
-                    Text(
-                      authProvider.companyName!.toUpperCase(),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                        fontSize: 18,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  if (authProvider.branchName != null)
-                    Text(
-                      authProvider.branchName!,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.grey[200]!),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.person_outline_rounded,
-                    size: 16,
-                    color: Colors.grey[700],
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    user?.name.split(' ').first.toUpperCase() ?? 'USUARIO',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        title: Text(
+          'CarwashPro',
+          style: GoogleFonts.outfit(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
         ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.logout_rounded, size: 20),
-              color: Colors.red[400],
-              tooltip: 'Cerrar Sesión',
-              onPressed: () {
-                context.read<AuthProvider>().logout();
-                context.go('/login');
-              },
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.black87),
+      ),
+      drawer: Drawer(
+        elevation: 10,
+        width: MediaQuery.of(context).size.width * 0.75, // Reasonable width
+        child: MenuScreen(
+          onItemClick: () {
+            Navigator.pop(context); // Standard way to close drawer
+          },
+        ),
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _refreshData,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.15,
+              children: [
+                _DashboardCard(
+                  title: 'Ingreso\nVehículo',
+                  icon: Icons.add_circle_rounded,
+                  color: cardColors[2],
+                  onTap: () => context.push('/vehicle-entry'),
+                  isPrimary: true,
+                ),
+                _DashboardCard(
+                  title: 'Vehículos\nActivos',
+                  icon: Icons.local_car_wash_rounded,
+                  color: cardColors[0], // Green
+                  onTap: () => context.push('/active-vehicles'),
+                  count: activeVehiclesCount,
+                ),
+                if (user?.role == 'admin')
+                  _DashboardCard(
+                    title: 'Facturación',
+                    icon: Icons.check_circle_rounded,
+                    color: cardColors[1], // Red
+                    onTap: () => context.push('/billing-list'),
+                    count: readyToBillCount,
+                  ),
+                if (user?.role == 'admin') ...[
+                  _DashboardCard(
+                    title: 'Sucursales',
+                    icon: Icons.store_rounded,
+                    color: cardColors[3],
+                    onTap: () => context.push('/branch-list'),
+                  ),
+                  _DashboardCard(
+                    title: 'Balance',
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: cardColors[5],
+                    onTap: () => context.push('/balance'),
+                  ),
+                  _DashboardCard(
+                    title: 'Consultas',
+                    icon: Icons.analytics_rounded,
+                    color: cardColors[4], // Purple
+                    onTap: () => context.push('/data-inspector'),
+                  ),
+                ],
+              ],
             ),
           ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-        child: GridView.count(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 1.0, // Square cards
-          children: [
-            _DashboardCard(
-              title: 'Vehículos\nActivos',
-              icon: Icons.local_car_wash_rounded,
-              color: cardColors[0],
-              onTap: () => context.push('/active-vehicles'),
-              isPrimary: true,
-              count: activeVehiclesCount,
-            ),
-            _DashboardCard(
-              title: 'Finalizar\nLavado',
-              icon: Icons.check_circle_rounded,
-              color: cardColors[1],
-              onTap: () => context.push('/billing-list'),
-              count: readyToBillCount,
-            ),
-            _DashboardCard(
-              title: 'Ingreso\nVehículo',
-              icon: Icons.add_circle_rounded,
-              color: cardColors[2],
-              onTap: () => context.push('/vehicle-entry'),
-            ),
-            if (user?.role == 'admin') ...[
-              _DashboardCard(
-                title: 'Sucursales',
-                icon: Icons.store_rounded,
-                color: cardColors[3],
-                onTap: () => context.push('/branch-list'),
-              ),
-              _DashboardCard(
-                title: 'Usuarios',
-                icon: Icons.people_alt_rounded,
-                color: cardColors[4],
-                onTap: () => context.push('/user-list'),
-              ),
-              _DashboardCard(
-                title: 'Balance',
-                icon: Icons.account_balance_wallet_rounded,
-                color: cardColors[5],
-                onTap: () => context.push('/balance'),
-              ),
-              _DashboardCard(
-                title: 'Empresa\n(SAR)',
-                icon: Icons.business_rounded,
-                color: const Color(0xFF6366F1), // Indigo
-                onTap: () => context.push('/company-config'),
-              ),
-              _DashboardCard(
-                title: 'Precios\n(Servicios)',
-                icon: Icons.attach_money_rounded,
-                color: const Color(0xFFEC4899), // Pink
-                onTap: () => context.push('/wash-types'),
-              ),
-            ],
-          ],
         ),
       ),
     );
@@ -235,7 +215,7 @@ class _DashboardCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: color.withOpacity(0.4),
+                color: color.withValues(alpha: 0.4),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
               ),
@@ -243,7 +223,7 @@ class _DashboardCard extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [color, color.withOpacity(0.8)],
+              colors: [color, color.withValues(alpha: 0.8)],
             ),
           ),
           child: Stack(
@@ -256,7 +236,7 @@ class _DashboardCard extends StatelessWidget {
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -272,10 +252,10 @@ class _DashboardCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.25),
+                          color: Colors.white.withValues(alpha: 0.25),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(icon, size: 32, color: Colors.white),
+                        child: Icon(icon, size: 28, color: Colors.white),
                       ),
                     ),
                     const Spacer(),
@@ -284,7 +264,7 @@ class _DashboardCard extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 15, // Reduced from 16
                         fontWeight: FontWeight.w600,
                         height: 1.1,
                       ),

@@ -13,6 +13,8 @@ abstract class VehicleEntryRepository {
     required String branchId,
     required String clientId,
     required String vehicleId,
+    required String clientName,
+    required String vehicleType,
   });
 
   Stream<List<Vehicle>> getVehiclesStream(String companyId, {String? branchId});

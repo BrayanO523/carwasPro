@@ -4,7 +4,7 @@ import '../../domain/entities/vehicle.dart';
 class VehicleModel extends Vehicle {
   VehicleModel({
     required super.id,
-    required super.model,
+    // required super.model, // Removed
     required super.clientId,
     required super.companyId,
     required super.entryDate,
@@ -23,7 +23,7 @@ class VehicleModel extends Vehicle {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return VehicleModel(
       id: doc.id,
-      model: data['modelo'] ?? '',
+      // model: data['modelo'] ?? '', // Removed
       clientId: data['cliente_id'] ?? '',
       companyId: data['empresa_id'] ?? '',
       entryDate: (data['fecha_ingreso'] as Timestamp).toDate(),
@@ -41,7 +41,7 @@ class VehicleModel extends Vehicle {
 
   Map<String, dynamic> toMap() {
     return {
-      'modelo': model,
+      // 'modelo': model, // Removed
       'cliente_id': clientId,
       'empresa_id': companyId,
       'fecha_ingreso': Timestamp.fromDate(entryDate),

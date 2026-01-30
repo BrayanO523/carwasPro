@@ -58,6 +58,7 @@ class CompanyRegistrationProvider extends ChangeNotifier {
         companyId: companyId,
         name: adminNameController.text.trim(),
         branchId: mainBranchId,
+        emissionPoint: '001', // Default for first Admin/Owner
       );
 
       // 3. Create Company Entity
@@ -81,6 +82,8 @@ class CompanyRegistrationProvider extends ChangeNotifier {
         address: addressController.text.trim(),
         phone: phoneController.text.trim(),
         companyId: companyId,
+        establishmentNumber: '000', // Default for Main Branch
+        // isMain: true? (If we had that field, but we assume first one is main for now)
       );
       await _branchRepository.createBranch(mainBranch);
 

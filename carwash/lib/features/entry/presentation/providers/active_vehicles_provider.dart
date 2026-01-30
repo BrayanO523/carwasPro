@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../domain/entities/vehicle.dart';
@@ -55,7 +57,7 @@ class ActiveVehiclesProvider extends ChangeNotifier {
             notifyListeners();
           },
           onError: (error) {
-            print('Error listening to vehicles: $error');
+            log('Error listening to vehicles: $error');
             _isLoading = false;
             notifyListeners();
           },
@@ -104,10 +106,10 @@ class ActiveVehiclesProvider extends ChangeNotifier {
     final query = _searchText.toLowerCase();
     return washingVehicles.where((vehicle) {
       final clientMatch = vehicle.clientName.toLowerCase().contains(query);
-      final modelMatch = vehicle.model.toLowerCase().contains(query);
+      // final modelMatch = vehicle.model.toLowerCase().contains(query);
       final plateMatch = vehicle.plate?.toLowerCase().contains(query) ?? false;
 
-      return clientMatch || modelMatch || plateMatch;
+      return clientMatch || plateMatch; // || modelMatch;
     }).toList();
   }
 
@@ -115,7 +117,7 @@ class ActiveVehiclesProvider extends ChangeNotifier {
     try {
       await _repository.updateVehicleStatus(vehicleId, Vehicle.statusWashed);
     } catch (e) {
-      print('Error marking vehicle as washed: $e');
+      log('Error marking vehicle as washed: $e');
       rethrow;
     }
   }
@@ -130,12 +132,12 @@ class ActiveVehiclesProvider extends ChangeNotifier {
 
       // 2. Fetch Client Info
       final client = await _repository.getClientById(vehicle.clientId);
-      if (client == null || client.phone == null || client.phone!.isEmpty) {
+      if (client == null || client.phone.isEmpty) {
         throw NoPhoneException();
       }
 
       // 3. Prepare Phone
-      String phone = client.phone!.replaceAll(RegExp(r'\D'), '');
+      String phone = client.phone.replaceAll(RegExp(r'\D'), '');
       if (!phone.startsWith('504')) phone = '504$phone';
 
       // 4. Prepare Message
@@ -155,7 +157,7 @@ class ActiveVehiclesProvider extends ChangeNotifier {
       if (e is NoPhoneException || e is WhatsAppLaunchException) {
         rethrow;
       }
-      print('Error in completeWashAndNotify: $e');
+      log('Error in completeWashAndNotify: $e');
       rethrow;
     }
   }
