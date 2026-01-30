@@ -3,24 +3,15 @@ import '../../domain/entities/wash_type.dart';
 
 class WashTypeModel extends WashType {
   const WashTypeModel({
-    required String id,
-    required String name,
-    required String description,
-    required String category,
-    required bool isActive,
-    required Map<String, double> prices,
-    String? companyId,
-    List<String> branchIds = const [],
-  }) : super(
-         id: id,
-         name: name,
-         description: description,
-         category: category,
-         isActive: isActive,
-         prices: prices,
-         companyId: companyId,
-         branchIds: branchIds,
-       );
+    required super.id,
+    required super.name,
+    required super.description,
+    required super.category,
+    required super.isActive,
+    required super.prices,
+    super.companyId,
+    super.branchIds = const [],
+  });
 
   factory WashTypeModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;

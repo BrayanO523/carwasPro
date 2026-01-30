@@ -8,6 +8,7 @@ class BranchModel extends Branch {
     required super.address,
     required super.phone,
     required super.companyId,
+    super.establishmentNumber = '000',
   });
 
   factory BranchModel.fromFirestore(DocumentSnapshot doc) {
@@ -18,6 +19,7 @@ class BranchModel extends Branch {
       address: data['direccion'] ?? '',
       phone: data['telefono'] ?? '',
       companyId: data['empresa_id'] ?? '',
+      establishmentNumber: data['numero_establecimiento'] ?? '000',
     );
   }
 
@@ -27,6 +29,7 @@ class BranchModel extends Branch {
       'direccion': address,
       'telefono': phone,
       'empresa_id': companyId,
+      'numero_establecimiento': establishmentNumber,
     };
   }
 }

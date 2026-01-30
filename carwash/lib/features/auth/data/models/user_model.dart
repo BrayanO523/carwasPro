@@ -9,6 +9,8 @@ class UserModel extends UserEntity {
     required super.role,
     required super.name,
     super.branchId,
+    super.emissionPoint,
+    super.isFirstLogin = true,
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -20,6 +22,9 @@ class UserModel extends UserEntity {
       role: data['rol'] ?? 'user',
       name: data['nombre'] ?? '',
       branchId: data['sucursal_id'],
+      emissionPoint: data['punto_emision'],
+      isFirstLogin:
+          data['is_first_login'] ?? true, // Default true for legacy users too
     );
   }
 
@@ -30,6 +35,8 @@ class UserModel extends UserEntity {
       'rol': role,
       'nombre': name,
       'sucursal_id': branchId,
+      'punto_emision': emissionPoint,
+      'is_first_login': isFirstLogin,
     };
   }
 }
