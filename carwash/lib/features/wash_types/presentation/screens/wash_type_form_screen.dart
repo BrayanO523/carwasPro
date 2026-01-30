@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../domain/entities/wash_type.dart';
+import 'package:carwash/features/entry/domain/entities/vehicle.dart'; // Corrected Import
 import '../providers/wash_type_provider.dart';
 import 'package:carwash/features/auth/presentation/providers/auth_provider.dart';
 import 'package:carwash/features/branch/presentation/providers/branch_provider.dart';
@@ -23,10 +24,7 @@ class _WashTypeFormScreenState extends State<WashTypeFormScreen> {
   late TextEditingController _descController;
 
   // Price Controllers
-  final _motoPriceCtrl = TextEditingController();
-  final _turismoPriceCtrl = TextEditingController();
-  final _camionetaPriceCtrl = TextEditingController();
-  final _grandePriceCtrl = TextEditingController();
+  final Map<String, TextEditingController> _priceControllers = {};
 
   String _category = 'base';
   bool _isActive = true;
@@ -46,12 +44,12 @@ class _WashTypeFormScreenState extends State<WashTypeFormScreen> {
     _isActive = item?.isActive ?? true;
     _selectedBranchIds = List.from(item?.branchIds ?? []);
 
-    if (item != null) {
-      _motoPriceCtrl.text = (item.prices['moto'] ?? 0).toStringAsFixed(0);
-      _turismoPriceCtrl.text = (item.prices['turismo'] ?? 0).toStringAsFixed(0);
-      _camionetaPriceCtrl.text = (item.prices['camioneta'] ?? 0)
-          .toStringAsFixed(0);
-      _grandePriceCtrl.text = (item.prices['grande'] ?? 0).toStringAsFixed(0);
+    // Initialize one controller per vehicle type
+    for (var type in Vehicle.types) {
+      final price = item?.prices[type] ?? 0;
+      _priceControllers[type] = TextEditingController(
+        text: price > 0 ? price.toStringAsFixed(0) : '',
+      );
     }
 
     // Load branches if not loaded
@@ -80,22 +78,22 @@ class _WashTypeFormScreenState extends State<WashTypeFormScreen> {
   void dispose() {
     _nameController.dispose();
     _descController.dispose();
-    _motoPriceCtrl.dispose();
-    _turismoPriceCtrl.dispose();
-    _camionetaPriceCtrl.dispose();
-    _grandePriceCtrl.dispose();
+    for (var controller in _priceControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final prices = {
-      'moto': double.tryParse(_motoPriceCtrl.text) ?? 0,
-      'turismo': double.tryParse(_turismoPriceCtrl.text) ?? 0,
-      'camioneta': double.tryParse(_camionetaPriceCtrl.text) ?? 0,
-      'grande': double.tryParse(_grandePriceCtrl.text) ?? 0,
-    };
+    final prices = <String, double>{};
+    for (var entry in _priceControllers.entries) {
+      final val = double.tryParse(entry.value.text) ?? 0;
+      if (val > 0) {
+        prices[entry.key] = val;
+      }
+    }
 
     final user = context.read<AuthProvider>().currentUser;
     if (user == null) return;
@@ -231,7 +229,7 @@ class _WashTypeFormScreenState extends State<WashTypeFormScreen> {
 
             // Category Dropdown
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(labelText: 'Categoría'),
               items: const [
                 DropdownMenuItem(
@@ -263,46 +261,32 @@ class _WashTypeFormScreenState extends State<WashTypeFormScreen> {
             ),
             const SizedBox(height: 8),
 
-            // Price Fields grid
-            Row(
-              children: [
-                Expanded(
-                  child: _PriceField(
-                    controller: _motoPriceCtrl,
-                    label: 'Moto',
-                    icon: Icons.two_wheeler,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _PriceField(
-                    controller: _turismoPriceCtrl,
-                    label: 'Turismo',
-                    icon: Icons.directions_car,
-                  ),
-                ),
-              ],
+            // Dynamic Price Fields Grid
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2, // 2 columns
+                childAspectRatio: 2.5,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: Vehicle.types.length,
+              itemBuilder: (context, index) {
+                final type = Vehicle.types[index];
+                final label =
+                    type[0].toUpperCase() +
+                    type.substring(1).replaceAll('_', ' ');
+                final icon = _getIconForType(type);
+
+                return _PriceField(
+                  controller: _priceControllers[type]!,
+                  label: label,
+                  icon: icon,
+                );
+              },
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _PriceField(
-                    controller: _camionetaPriceCtrl,
-                    label: 'Camioneta',
-                    icon: Icons.airport_shuttle,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _PriceField(
-                    controller: _grandePriceCtrl,
-                    label: 'Grande',
-                    icon: Icons.local_shipping,
-                  ),
-                ),
-              ],
-            ),
+
             const SizedBox(height: 32),
 
             FilledButton.icon(
@@ -315,6 +299,24 @@ class _WashTypeFormScreenState extends State<WashTypeFormScreen> {
         ),
       ),
     );
+  }
+
+  IconData _getIconForType(String type) {
+    if (type.contains('moto')) return Icons.two_wheeler;
+    if (type.contains('trimoto')) return Icons.electric_rickshaw;
+    if (type.contains('turismo')) return Icons.directions_car;
+    if (type.contains('pick_up')) {
+      return Icons.directions_car_filled; // Changed to car filled
+    }
+    if (type.contains('camioneta') || type.contains('microbus')) {
+      return Icons.airport_shuttle;
+    }
+    if (type.contains('camion') ||
+        type.contains('cabezal') ||
+        type.contains('autobus')) {
+      return Icons.local_shipping;
+    }
+    return Icons.directions_car_filled; // Default
   }
 }
 

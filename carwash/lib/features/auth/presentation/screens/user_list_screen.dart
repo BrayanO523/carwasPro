@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import '../providers/user_management_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/user_entity.dart';
@@ -23,117 +24,6 @@ class _UserListScreenState extends State<UserListScreen> {
     });
   }
 
-  void _showAddUserDialog(BuildContext context) {
-    final provider = context.read<UserManagementProvider>();
-    final companyId = context.read<AuthProvider>().currentUser?.companyId;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => ChangeNotifierProvider.value(
-        value: provider,
-        child: Builder(
-          builder: (context) {
-            final localProvider = context.watch<UserManagementProvider>();
-            return AlertDialog(
-              title: const Text('Nuevo Usuario'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: localProvider.nameController,
-                      decoration: const InputDecoration(labelText: 'Nombre'),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: localProvider.emailController,
-                      decoration: const InputDecoration(labelText: 'Email'),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: localProvider.passwordController,
-                      decoration: const InputDecoration(
-                        labelText: 'Contraseña',
-                      ),
-                      obscureText: true,
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Rol'),
-                      value: localProvider.selectedRole,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'user',
-                          child: Text('Empleado'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'admin',
-                          child: Text('Administrador'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          localProvider.setSelectedRole(value);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Sucursal'),
-                      value: localProvider.selectedBranchId,
-                      items: localProvider.branches.map((branch) {
-                        return DropdownMenuItem(
-                          value: branch.id,
-                          child: Text(branch.name),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        localProvider.setSelectedBranch(value);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar'),
-                ),
-                if (localProvider.errorMessage != null)
-                  Text(
-                    localProvider.errorMessage!,
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                ElevatedButton(
-                  onPressed: localProvider.isLoading
-                      ? null
-                      : () async {
-                          if (companyId != null) {
-                            final success = await localProvider.createUser(
-                              companyId: companyId,
-                            );
-                            if (success && ctx.mounted) {
-                              Navigator.pop(ctx);
-                            }
-                          }
-                        },
-                  child: localProvider.isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Guardar'),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserManagementProvider>();
@@ -144,7 +34,7 @@ class _UserListScreenState extends State<UserListScreen> {
         backgroundColor: Colors.transparent,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddUserDialog(context),
+        onPressed: () => context.push('/user-create'),
         backgroundColor: const Color(
           0xFFA78BFA,
         ), // Purple color matching home card
@@ -230,13 +120,13 @@ class _UserListScreenState extends State<UserListScreen> {
                             leading: CircleAvatar(
                               backgroundColor: const Color(
                                 0xFFA78BFA,
-                              ).withOpacity(0.2),
+                              ).withValues(alpha: 0.2),
                               child: const Icon(
                                 Icons.person,
                                 color: Color(0xFFA78BFA),
                               ),
                             ),
-                            title: Text(user.name ?? user.email),
+                            title: Text(user.name),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -262,6 +152,9 @@ class _UserListScreenState extends State<UserListScreen> {
     final provider = context.read<UserManagementProvider>();
     final companyId = context.read<AuthProvider>().currentUser?.companyId;
     final nameController = TextEditingController(text: user.name);
+    final emissionPointController = TextEditingController(
+      text: user.emissionPoint ?? '001',
+    );
     String? selectedBranchId = user.branchId;
 
     showDialog(
@@ -279,9 +172,19 @@ class _UserListScreenState extends State<UserListScreen> {
                     decoration: const InputDecoration(labelText: 'Nombre'),
                   ),
                   const SizedBox(height: 16),
+                  if (user.role == 'admin')
+                    TextField(
+                      controller: emissionPointController,
+                      decoration: const InputDecoration(
+                        labelText: 'Punto de Emisión (SAR)',
+                      ),
+                      maxLength: 3,
+                      keyboardType: TextInputType.number,
+                    ),
+                  const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(labelText: 'Sucursal'),
-                    value: selectedBranchId,
+                    initialValue: selectedBranchId,
                     items: provider.branches.map((branch) {
                       return DropdownMenuItem(
                         value: branch.id,
@@ -347,6 +250,10 @@ class _UserListScreenState extends State<UserListScreen> {
                       name: nameController.text.trim(),
                       branchId: selectedBranchId,
                       companyId: companyId,
+                      // Force null if not admin, otherwise use controller value
+                      emissionPoint: user.role == 'admin'
+                          ? emissionPointController.text.trim()
+                          : null,
                     );
                     if (success && ctx.mounted) {
                       Navigator.pop(ctx);
