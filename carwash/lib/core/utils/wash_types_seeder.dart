@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class WashTypesSeeder {
@@ -36,9 +38,9 @@ class WashTypesSeeder {
       }
 
       if (anyUpdated) {
-        print("Migrating existing wash types...");
+        log("Migrating existing wash types...");
         await batchUpdate.commit();
-        print("Migration complete.");
+        log("Migration complete.");
       }
 
       // If we have data (migrated or not), we stop here. Use separate logic if we want to add missing defaults.
@@ -176,6 +178,6 @@ class WashTypesSeeder {
     }
 
     await batch.commit();
-    print("Seed de tiposLavados completado con éxito.");
+    log("Seed de tiposLavados completado con éxito.");
   }
 }

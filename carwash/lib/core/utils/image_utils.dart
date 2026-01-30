@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'dart:io';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path/path.dart' as p;
@@ -18,15 +20,15 @@ class ImageUtils {
       var result = await FlutterImageCompress.compressAndGetFile(
         file.absolute.path,
         targetPath,
-        quality: 85, // Good balance between size and quality
-        minWidth: 1920, // Max width 1080p equivalentish
-        minHeight: 1080,
+        quality: 75, // Optimized for speed
+        minWidth: 1280, // 720p+ (Enough for evidence)
+        minHeight: 1280,
       );
 
       if (result != null) {
         final originalSize = await file.length();
         final compressedSize = await result.length();
-        print(
+        log(
           'Image Compressed: ${(originalSize / 1024).toStringAsFixed(2)}KB -> ${(compressedSize / 1024).toStringAsFixed(2)}KB',
         );
         return File(result.path);
@@ -34,7 +36,7 @@ class ImageUtils {
         return file;
       }
     } catch (e) {
-      print('Error compressing image: $e');
+      log('Error compressing image: $e');
       return file; // Fallback to original
     }
   }

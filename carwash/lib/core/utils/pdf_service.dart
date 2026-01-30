@@ -97,16 +97,16 @@ class PdfService {
                           ),
                           pw.Divider(height: 8),
                           pw.Text(
-                            'CAI: ${fiscalConfig.cai}',
+                            'CAI: ${fiscalConfig.cai ?? "N/A"}',
                             style: const pw.TextStyle(fontSize: 9),
                           ),
                           pw.Text(
-                            'Rango: ${fiscalConfig.rangeMin} al ${fiscalConfig.rangeMax}',
-                            style: const pw.TextStyle(fontSize: 9),
+                            'Rango Autorizado:\nDel ${fiscalConfig.establishment ?? "000"}-${fiscalConfig.emissionPoint ?? "001"}-${fiscalConfig.documentType ?? "01"}-${(fiscalConfig.rangeMin ?? 0).toString().padLeft(8, '0')} al ${fiscalConfig.establishment ?? "000"}-${fiscalConfig.emissionPoint ?? "001"}-${fiscalConfig.documentType ?? "01"}-${(fiscalConfig.rangeMax ?? 0).toString().padLeft(8, '0')}',
+                            style: const pw.TextStyle(fontSize: 8),
                           ),
                           pw.Text(
-                            'Fecha Límite: ${DateFormat('dd/MM/yyyy').format(fiscalConfig.deadline)}',
-                            style: const pw.TextStyle(fontSize: 9),
+                            'Fecha Emisión: ${fiscalConfig.authorizationDate != null ? DateFormat('dd/MM/yyyy').format(fiscalConfig.authorizationDate!) : "N/A"}   Fecha Límite: ${fiscalConfig.deadline != null ? DateFormat('dd/MM/yyyy').format(fiscalConfig.deadline!) : "N/A"}',
+                            style: const pw.TextStyle(fontSize: 8),
                           ),
                         ],
                       ),
@@ -141,10 +141,13 @@ class PdfService {
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text('CLIENTE: ${invoice.clientName}'),
-                          pw.Text(
-                            'RTN: ${invoice.clientRtn ?? "Consumidor Final"}',
-                          ),
-                          if (client != null && client.address != null)
+                          if (isInvoice)
+                            pw.Text(
+                              'RTN: ${invoice.clientRtn ?? "Consumidor Final"}',
+                            ),
+                          if (isInvoice &&
+                              client != null &&
+                              client.address != null)
                             pw.Text('Dirección: ${client.address}'),
                         ],
                       ),
@@ -156,7 +159,7 @@ class PdfService {
                           pw.Text('FECHA: $dateFormatted'),
                           if (vehicle != null)
                             pw.Text(
-                              'VEHÍCULO: ${vehicle.plate ?? "S/P"} - ${vehicle.model ?? ""}',
+                              'VEHÍCULO: ${(vehicle.vehicleType ?? "").toUpperCase()} ${vehicle.plate != null && vehicle.plate!.isNotEmpty ? "(${vehicle.plate})" : ""}',
                             ),
                         ],
                       ),
@@ -386,6 +389,8 @@ class PdfService {
   }
 
   static Future<void> sharePdf(File file, String text) async {
-    await Share.shareXFiles([XFile(file.path)], text: text);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], text: text),
+    );
   }
 }

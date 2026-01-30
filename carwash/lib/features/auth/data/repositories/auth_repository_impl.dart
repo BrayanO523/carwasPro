@@ -68,6 +68,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String name,
     required String role,
     String? branchId,
+    String? emissionPoint,
   }) async {
     FirebaseApp? secondaryApp;
     try {
@@ -99,6 +100,7 @@ class AuthRepositoryImpl implements AuthRepository {
         role: role,
         name: name,
         branchId: branchId,
+        emissionPoint: emissionPoint,
       );
 
       // 4. Create user document in Firestore 'usuarios' collection
@@ -122,6 +124,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String companyId,
     required String name,
     required String branchId,
+    String? emissionPoint, // Added emissionPoint
   }) async {
     try {
       // 1. Create User in Main Auth Instance (Logs in automatically)
@@ -144,6 +147,7 @@ class AuthRepositoryImpl implements AuthRepository {
         role: 'admin',
         name: name,
         branchId: branchId,
+        emissionPoint: emissionPoint, // Added emissionPoint
       );
 
       // 3. Save to Firestore (Now authorized because we are logged in)
@@ -160,8 +164,13 @@ class AuthRepositoryImpl implements AuthRepository {
     required String userId,
     required String name,
     String? branchId,
+    String? emissionPoint,
   }) async {
-    final updates = <String, dynamic>{'nombre': name, 'sucursal_id': branchId};
+    final updates = <String, dynamic>{
+      'nombre': name,
+      'sucursal_id': branchId,
+      'punto_emision': emissionPoint,
+    };
     await _firestore.collection('usuarios').doc(userId).update(updates);
   }
 
@@ -171,5 +180,12 @@ class AuthRepositoryImpl implements AuthRepository {
     // Deleting the Auth user requires Admin SDK or Cloud Functions in a real production app.
     // For this prototype, removing from Firestore is sufficient to hide them from the app.
     await _firestore.collection('usuarios').doc(userId).delete();
+  }
+
+  @override
+  Future<void> markFirstLoginComplete(String userId) async {
+    await _firestore.collection('usuarios').doc(userId).update({
+      'is_first_login': false,
+    });
   }
 }
