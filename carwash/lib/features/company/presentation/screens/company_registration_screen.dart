@@ -52,7 +52,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
           } else {
             // Register
             final success = await provider.registerCompany();
-            if (success && mounted) {
+            if (success && context.mounted) {
               // Navigate to Home or Login
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Empresa registrada con éxito!')),

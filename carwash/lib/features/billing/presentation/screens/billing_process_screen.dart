@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -17,8 +19,6 @@ import 'package:go_router/go_router.dart';
 
 import 'package:carwash/features/branch/domain/entities/branch.dart';
 import 'package:carwash/features/billing/domain/entities/invoice_item.dart';
-import 'package:carwash/features/billing/domain/entities/invoice.dart';
-import 'package:carwash/features/billing/presentation/providers/balance_provider.dart';
 
 class BillingProcessScreen extends StatefulWidget {
   final Vehicle vehicle;
@@ -150,7 +150,7 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingClient = false);
-      print('Error loading data: $e');
+      log('Error loading data: $e');
     }
   }
 
@@ -305,24 +305,68 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
         child: Column(
           children: [
             // Document Type Selector inside Card
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(
-                  value: 'invoice',
-                  label: Text('FACTURA'),
-                  icon: Icon(Icons.description),
-                ),
-                ButtonSegment(
-                  value: 'receipt',
-                  label: Text('RECIBO'),
-                  icon: Icon(Icons.receipt),
-                ),
-              ],
-              selected: {_selectedDocType},
-              onSelectionChanged: (Set<String> newSelection) {
-                setState(() {
-                  _selectedDocType = newSelection.first;
-                });
+            // Check if Fiscal Config allows Invoicing
+            Builder(
+              builder: (context) {
+                final fiscalConfig = context
+                    .watch<BillingProvider>()
+                    .fiscalConfig;
+                final canInvoice = (fiscalConfig?.cai?.isNotEmpty ?? false);
+
+                // Force Receipt if cannot invoice
+                if (!canInvoice && _selectedDocType == 'invoice') {
+                  // Defer state update to next frame to avoid build error
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _selectedDocType = 'receipt');
+                  });
+                }
+
+                if (!canInvoice) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.receipt, color: Colors.orange),
+                        SizedBox(width: 8),
+                        Text(
+                          'MODO RECIBO (NO FISCAL)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'invoice',
+                      label: Text('FACTURA'),
+                      icon: Icon(Icons.description),
+                    ),
+                    ButtonSegment(
+                      value: 'receipt',
+                      label: Text('RECIBO'),
+                      icon: Icon(Icons.receipt),
+                    ),
+                  ],
+                  selected: {_selectedDocType},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    setState(() {
+                      _selectedDocType = newSelection.first;
+                    });
+                  },
+                );
               },
             ),
             const SizedBox(height: 16),
@@ -404,13 +448,15 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
               'Cliente: ${widget.vehicle.clientName}',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
-            const SizedBox(height: 12),
-            _buildTextField(_rtnController, 'RTN del Cliente'),
-            const SizedBox(height: 12),
-            _buildTextField(
-              _clientAddressController,
-              'Dirección del Consumidor',
-            ),
+            if (_selectedDocType == 'invoice') ...[
+              const SizedBox(height: 12),
+              _buildTextField(_rtnController, 'RTN del Cliente'),
+              const SizedBox(height: 12),
+              _buildTextField(
+                _clientAddressController,
+                'Dirección del Consumidor',
+              ),
+            ],
           ],
         ),
       ),
@@ -446,29 +492,31 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
             Row(
               children: const [
                 Expanded(
-                  flex: 3,
                   child: Text(
                     'Descripción',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
-                Expanded(
-                  flex: 1,
+                SizedBox(width: 8),
+                SizedBox(
+                  width: 40,
                   child: Text(
                     'Cant.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
-                Expanded(
-                  flex: 2,
+                SizedBox(width: 8),
+                SizedBox(
+                  width: 85,
                   child: Text(
                     'Total',
                     textAlign: TextAlign.right,
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
-                SizedBox(width: 40), // Space for actions
+                SizedBox(width: 8),
+                SizedBox(width: 60), // Actions placeholder
               ],
             ),
             const SizedBox(height: 8),
@@ -481,27 +529,61 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      flex: 3,
-                      // Editable Description could go here, for now static
-                      child: Text(item.description),
-                    ),
-                    Expanded(
-                      flex: 1,
                       child: Text(
-                        '1',
-                        textAlign: TextAlign.center,
-                      ), // Mock Quantity
+                        item.description,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ),
-                    Expanded(
-                      flex: 2,
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 40,
+                      child: Text(
+                        item.quantity % 1 == 0
+                            ? item.quantity.toInt().toString()
+                            : item.quantity.toStringAsFixed(1),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 85,
                       child: Text(
                         'L. ${item.total.toStringAsFixed(2)}',
                         textAlign: TextAlign.right,
+                        style: const TextStyle(fontSize: 13),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _confirmRemoveItem(index),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 60,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          InkWell(
+                            onTap: () => _showEditItemDialog(index),
+                            child: const Padding(
+                              padding: EdgeInsets.all(4.0),
+                              child: Icon(
+                                Icons.edit,
+                                color: Colors.blue,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () => _confirmRemoveItem(index),
+                            child: const Padding(
+                              padding: EdgeInsets.all(4.0),
+                              child: Icon(
+                                Icons.delete,
+                                color: Colors.red,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -553,8 +635,9 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
     bool isBold = false,
     double fontSize = 14,
   }) {
-    if (amount == 0 && !isBold)
+    if (amount == 0 && !isBold) {
       return const SizedBox.shrink(); // Hide 0 sections
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -608,164 +691,269 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
     );
   }
 
-  void _showAddItemDialog() {
-    final provider = context.read<BillingProvider>();
-    final catalog = provider.washTypesCatalog;
-    final vehicleType = widget.vehicle.vehicleType ?? 'turismo';
+  void _showEditItemDialog(int index) {
+    final item = _invoiceItems[index];
+    final qtyController = TextEditingController(text: item.quantity.toString());
+    final priceController = TextEditingController(
+      text: item.unitPrice.toString(),
+    );
 
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'Agregar Servicio',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Editar Item'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              item.description,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: qtyController,
+              decoration: const InputDecoration(
+                labelText: 'Cantidad',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: priceController,
+              decoration: const InputDecoration(
+                labelText: 'Precio Unitario (L.)',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
           ),
-          Expanded(
-            child: catalog.isEmpty
-                ? const Center(child: Text('No hay servicios disponibles'))
-                : ListView.separated(
-                    itemCount: catalog.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final service = catalog[index];
-                      final name = service['nombre'] ?? 'Servicio';
-                      final prices =
-                          service['precios'] as Map<String, dynamic>?;
-                      final price = (prices?[vehicleType] ?? 0).toDouble();
+          ElevatedButton(
+            onPressed: () {
+              final newQty =
+                  double.tryParse(qtyController.text) ?? item.quantity;
+              final newPrice =
+                  double.tryParse(priceController.text) ?? item.unitPrice;
 
-                      return ListTile(
-                        leading: const Icon(Icons.local_car_wash),
-                        title: Text(name),
-                        subtitle: Text(
-                          'Precio: L. ${price.toStringAsFixed(2)}',
-                        ),
-                        onTap: () {
-                          // Add Item
-                          setState(() {
-                            _invoiceItems.add(
-                              InvoiceItem(
-                                description: name,
-                                unitPrice: price,
-                                quantity: 1,
-                                taxType: '15', // Default 15% ISV
-                              ),
-                            );
-                          });
-                          Navigator.pop(ctx);
-                        },
-                      );
-                    },
+              if (newQty <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('La cantidad debe ser mayor a 0'),
                   ),
+                );
+                return;
+              }
+
+              setState(() {
+                _invoiceItems[index] = InvoiceItem(
+                  description: item.description,
+                  quantity: newQty,
+                  unitPrice: newPrice,
+                  taxType: item.taxType,
+                );
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Guardar'),
           ),
         ],
       ),
     );
   }
 
+  void _showAddItemDialog() {
+    final provider = context.read<BillingProvider>();
+    // Load products if not loaded
+    if (provider.productsCatalog.isEmpty && _company != null) {
+      provider.loadProductsCatalog(_company!.id, branchId: _branch?.id);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Allow full height for tabs
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => FractionallySizedBox(
+        heightFactor: 0.7,
+        child: DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Agregar Item',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+              const TabBar(
+                labelColor: Colors.blue,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: Colors.blue,
+                tabs: [
+                  Tab(text: 'Servicios', icon: Icon(Icons.cleaning_services)),
+                  Tab(text: 'Productos', icon: Icon(Icons.shopping_bag)),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [_servicesListWidget(), _productsListWidget()],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Helper Widget Wrapper
+  Widget _servicesListWidget() {
+    return Builder(builder: (context) => _buildServicesList(context));
+  }
+
+  Widget _productsListWidget() {
+    return Builder(builder: (context) => _buildProductsList(context));
+  }
+
+  Widget _buildServicesList(BuildContext context) {
+    final provider = context.watch<BillingProvider>();
+    final catalog = provider.washTypesCatalog;
+    final vehicleType = widget.vehicle.vehicleType ?? 'turismo';
+
+    if (catalog.isEmpty) {
+      return const Center(child: Text('No hay servicios disponibles'));
+    }
+
+    return ListView.separated(
+      physics: const ClampingScrollPhysics(),
+      itemCount: catalog.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final service = catalog[index];
+        final name = service['nombre'] ?? 'Servicio';
+        final prices = service['precios'] as Map<String, dynamic>?;
+        final price = (prices?[vehicleType] ?? 0).toDouble();
+
+        return ListTile(
+          leading: const Icon(Icons.local_car_wash),
+          title: Text(name),
+          subtitle: Text('Precio: L. ${price.toStringAsFixed(2)}'),
+          onTap: () {
+            setState(() {
+              _invoiceItems.add(
+                InvoiceItem(
+                  description: name,
+                  unitPrice: price,
+                  quantity: 1,
+                  taxType: '15',
+                ),
+              );
+            });
+            Navigator.pop(context);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProductsList(BuildContext context) {
+    final provider = context.watch<BillingProvider>();
+    final products = provider.productsCatalog;
+
+    if (products.isEmpty) {
+      return const Center(child: Text('No hay productos disponibles'));
+    }
+
+    return ListView.separated(
+      physics: const ClampingScrollPhysics(),
+      itemCount: products.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final product = products[index];
+        final name = product['nombre'] ?? 'Producto';
+        final price = (product['precio'] ?? 0).toDouble();
+
+        return ListTile(
+          leading: const Icon(Icons.shopping_bag_outlined),
+          title: Text(name),
+          subtitle: Text('Precio: L. ${price.toStringAsFixed(2)}'),
+          trailing: IconButton(
+            icon: const Icon(Icons.add_circle_outline, color: Colors.blue),
+            onPressed: () {
+              setState(() {
+                _invoiceItems.add(
+                  InvoiceItem(
+                    description: name,
+                    unitPrice: price,
+                    quantity: 1,
+                    taxType: '15',
+                  ),
+                );
+              });
+              Navigator.pop(context);
+            },
+          ),
+          onTap: () {
+            setState(() {
+              _invoiceItems.add(
+                InvoiceItem(
+                  description: name,
+                  unitPrice: price,
+                  quantity: 1,
+                  taxType: '15',
+                ),
+              );
+            });
+            Navigator.pop(context);
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _processAndSave() async {
     try {
-      // Validate
-      if (_company == null) throw Exception("Datos de empresa no cargados");
-
-      // Validate Fiscal Data ONLY if Invoice
-      // Validate Fiscal Data ONLY if Invoice
-      if (_selectedDocType == 'invoice') {
-        final fiscalConfig = context.read<BillingProvider>().fiscalConfig;
-        if (fiscalConfig == null ||
-            fiscalConfig.cai.isEmpty ||
-            fiscalConfig.rtn.isEmpty ||
-            fiscalConfig.rangeMin.isEmpty ||
-            fiscalConfig.rangeMax.isEmpty) {
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Configuración Fiscal Incompleta'),
-              content: const Text(
-                'Para emitir FACTURAS, necesitas configurar el CAI, RTN y Rangos en la sección de Empresa.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    context.push('/company-config');
-                  },
-                  child: const Text('Ir a Configuración'),
-                ),
-              ],
-            ),
-          );
-          return;
-        }
+      if (_company == null || _client == null) {
+        throw Exception("Datos incompletos");
       }
 
       setState(() => _isProcessing = true);
 
-      // 1. Update/Save Fiscal Config
-      // 1. Get Fiscal Config (already validated if invoice)
-      final fiscalConfig = context.read<BillingProvider>().fiscalConfig;
-
-      // Note: We don't need to update FiscalConfig here anymore as we aren't editing it.
-      // We rely on the one loaded from 'company-config'.
-      // EXCEPT: We might need to increment currentSequence, but that should ideally happen in the backend
-      // or via a specific method in provider, not by overwriting the whole config with empty controllers.
-
-      // For now, we just proceed to create the invoice using the loaded fiscal data.
-      // The updateFiscalConfig call is removed because we are not editing it here.
-
-      // 2. Create Invoice Entity
-      final invoice = Invoice(
-        id: DateTime.now().millisecondsSinceEpoch.toString(), // Generated ID
-        companyId: _company!.id,
-        branchId: _branch?.id ?? '',
-        clientId: _client!.id,
-        vehicleId: widget.vehicle.id,
-        clientName: _client!.name,
-        clientRtn: _rtnController.text,
-        invoiceNumber:
-            '${_selectedDocType == 'invoice' ? 'FAC' : 'REC'}-${DateTime.now().millisecondsSinceEpoch}',
-
-        // CAI/Range passed via fiscalConfig to PDF
+      // Delegate to Provider
+      final invoice = await context.read<BillingProvider>().emitInvoice(
+        vehicle: widget.vehicle,
+        client: _client!,
+        company: _company!,
+        branch: _branch,
+        issuer: context.read<AuthProvider>().currentUser!,
+        rtn: _rtnController.text,
         items: _invoiceItems,
-        subtotal: _subtotal,
-        discountTotal: _discountTotal,
-
-        // Tax Breakdown
-        exemptAmount: _exemptAmount,
-        taxableAmount15: _taxableAmount15,
-        taxableAmount18: _taxableAmount18,
-        isv15: _isv15,
-        isv18: _isv18,
-
-        totalAmount: _total,
-        createdAt: DateTime.now(),
-        documentType: _selectedDocType,
+        docType: _selectedDocType,
       );
 
-      // 3. Save Invoice via Provider
-      await context.read<BalanceProvider>().createInvoice(invoice);
-
-      // 4. Mark Vehicle as Finished
-      await context.read<BillingProvider>().markAsFinished(widget.vehicle.id);
-
       // 5. Generate PDF
+      // Note: Fiscal config might have been updated during emitInvoice, but we passed checks
+      if (!context.mounted) return;
+      final fiscalConfig = context.read<BillingProvider>().fiscalConfig;
+
       final pdfBytes = await PdfService.generateInvoicePdf(
         invoice: invoice,
         company: _company!,
         branch: _branch,
         logoBytes: null, // TODO: Load Logo
         fiscalConfig: fiscalConfig, // Pass full fiscal config
+        client: _client,
+        vehicle: widget.vehicle,
       );
 
       // 6. Print/Show/Share PDF
@@ -777,25 +965,41 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
         pdfBytes,
       );
 
-      if (mounted) {
-        // Share via WhatsApp/System
-        await PdfService.sharePdf(
-          pdfFile,
-          'Adjunto su documento de CarWash (Factura/Recibo)',
-        );
+      if (!context.mounted) return;
+      // Share via WhatsApp/System
+      await PdfService.sharePdf(
+        pdfFile,
+        'Adjunto su documento de CarWash (Factura/Recibo)',
+      );
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Factura Emitida y Enviada')),
-        );
-        context.go('/home');
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Factura Emitida y Enviada')),
+      );
+      context.go('/home');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error al emitir factura: $e')));
+      if (context.mounted) {
+        // Show clearer error message
+        String msg = e.toString().replaceAll('Exception: ', '');
+        _showFiscalError('Error', msg);
         setState(() => _isProcessing = false);
       }
     }
+  }
+
+  void _showFiscalError(String title, String content) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 }
