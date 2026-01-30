@@ -22,10 +22,19 @@ service cloud.firestore {
     function isSameCompany(resourceData) {
       return belongsToCompany(resourceData.empresa_id);
     }
+
+    // Check if resource belongs to same branch (using 'sucursal_id')
+    // Logic:
+    // 1. MUST belong to same Company.
+    // 2. IF user is 'admin', they can access ALL branches in company.
+    // 3. IF user is NOT 'admin' (employee), they are restricted to their assigned 'sucursal_id'.
+    function isSameBranch(resourceData) {
+      return belongsToCompany(resourceData.empresa_id) && 
+             (getUserData().rol == 'admin' || getUserData().sucursal_id == resourceData.sucursal_id);
+    }
     
     // --- Collection Rules (Spanish Names) ---
 
-    // USUARIOS (Users)
     // USUARIOS (Users)
     match /usuarios/{userId} {
       // 1. User can read/write their own profile
@@ -34,6 +43,10 @@ service cloud.firestore {
       // Helper to check if requester is admin of the target user's company
       function isAdminOfTargetCompany(targetData) {
         return belongsToCompany(targetData.empresa_id) && getUserData().rol == 'admin';
+        // Note: 'admin' role here likely means Company Admin. 
+        // If we wanted strictly Branch Admin, we'd check branch too, but User Management is usually Company level?
+        // User prompt implies strict branch scoping for BILLING, but User Management might be broader.
+        // Keeping as provided (Company Level for Users).
       }
 
       allow read: if (isSignedIn() && request.auth.uid == userId) || 
@@ -87,17 +100,26 @@ service cloud.firestore {
       allow delete: if belongsToCompany(resource.data.empresa_id);
     }
 
-    // FACTURACION (Fiscal Config)
+    // FACTURACION (Fiscal Config) - BRANCH SCOPED
+    // "authorization range now must be validated by branch"
     match /facturacion/{docId} {
-      allow read: if isSameCompany(resource.data);
-      allow write: if isSameCompany(request.resource.data);
+      allow read: if isSameBranch(resource.data);
+      allow write: if isSameBranch(request.resource.data);
     }
 
-    // FACTURAS (Invoices)
+    // FACTURAS (Invoices) - BRANCH SCOPED
     match /facturas/{docId} {
-      allow read: if isSameCompany(resource.data);
+      allow read: if isSameBranch(resource.data);
+      allow create: if isSameBranch(request.resource.data);
+      allow update: if isSameBranch(resource.data) && isSameBranch(request.resource.data);
+    }
+    
+    // PRODUCTOS (Products)
+    match /productos/{docId} {
+      allow read: if isSameCompany(resource.data) || belongsToCompany(resource.data.empresa_id);
       allow create: if isSameCompany(request.resource.data);
       allow update: if isSameCompany(resource.data) && isSameCompany(request.resource.data);
+      allow delete: if isSameCompany(resource.data);
     }
   }
 }
