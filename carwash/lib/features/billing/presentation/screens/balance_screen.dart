@@ -529,7 +529,7 @@ class _BalanceScreenState extends State<BalanceScreen>
                 const SizedBox(width: 16),
                 Expanded(
                   child: _MetricCard(
-                    title: 'Ticket Promedio',
+                    title: 'Promedio por Factura',
                     value: totalInvoices > 0
                         ? 'L. ${(totalIncome / totalInvoices).toStringAsFixed(0)}'
                         : 'L. 0',
@@ -555,37 +555,7 @@ class _BalanceScreenState extends State<BalanceScreen>
             ),
             const SizedBox(height: 16),
 
-            if (dailyRevenue.isNotEmpty)
-              RevenueChart(dailyRevenue: dailyRevenue)
-            else
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.shade100),
-                ),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.bar_chart_rounded,
-                        size: 48,
-                        color: Colors.grey.shade300,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Sin datos para mostrar',
-                        style: GoogleFonts.outfit(
-                          color: Colors.grey.shade400,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            RevenueChart(invoices: balanceProvider.invoices),
           ],
         ),
       ),
