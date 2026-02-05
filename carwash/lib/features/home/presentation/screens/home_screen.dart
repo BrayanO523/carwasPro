@@ -31,7 +31,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ? user.branchId
               : null,
         );
-        context.read<BillingProvider>().init(user.companyId);
+        context.read<BillingProvider>().init(
+          user.companyId,
+          branchId: (user.branchId != null && user.branchId!.isNotEmpty)
+              ? user.branchId
+              : null,
+        );
       }
 
       // Show Welcome Alert if user is admin and first login
@@ -70,7 +75,13 @@ class _HomeScreenState extends State<HomeScreen> {
             true, // Ensure force refresh if supported, or just init usually resets streams/listeners
       );
       // Refresh Billing (Counters)
-      context.read<BillingProvider>().init(user.companyId, force: true);
+      context.read<BillingProvider>().init(
+        user.companyId,
+        branchId: (user.branchId != null && user.branchId!.isNotEmpty)
+            ? user.branchId
+            : null,
+        force: true,
+      );
 
       // Wait a bit to ensure UI updates if needed, though providers notify listeners.
       await Future.delayed(const Duration(milliseconds: 500));
@@ -174,6 +185,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: Icons.analytics_rounded,
                     color: cardColors[4], // Purple
                     onTap: () => context.push('/data-inspector'),
+                  ),
+                  _DashboardCard(
+                    title: 'Cuentas\npor Cobrar',
+                    icon: Icons.request_quote_rounded,
+                    color: Colors.teal, // Teal for money
+                    onTap: () => context.push('/accounts-receivable'),
                   ),
                 ],
               ],

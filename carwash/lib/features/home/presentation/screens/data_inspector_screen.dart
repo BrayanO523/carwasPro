@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:carwash/features/auth/data/models/user_model.dart';
+import 'package:carwash/features/auth/domain/entities/user_entity.dart';
 import 'package:carwash/features/auth/presentation/providers/auth_provider.dart';
-import 'package:carwash/features/branch/data/models/branch_model.dart';
-import '../widgets/organization_filter_sheet.dart';
+import 'package:carwash/features/branch/domain/entities/branch.dart';
+import '../widgets/data_inspector_filter_sheet.dart';
+// import '../widgets/organization_filter_sheet.dart'; // Removed
 import '../providers/data_inspector_provider.dart';
+import '../../../audit/domain/entities/audit_log.dart';
 
 class DataInspectorScreen extends StatefulWidget {
   const DataInspectorScreen({super.key});
@@ -17,11 +18,13 @@ class DataInspectorScreen extends StatefulWidget {
 }
 
 class _DataInspectorScreenState extends State<DataInspectorScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   int? _selectedIndex;
 
   // Organization Tab Controller
   late TabController _orgTabController;
+  // Operations Tab Controller
+  late TabController _opsTabController;
 
   // -- FILTER STATES --
   // Branch Filters
@@ -36,12 +39,16 @@ class _DataInspectorScreenState extends State<DataInspectorScreen>
   // I will use `provider.selectedBranchId` as the source of truth for "Selected Branch".
 
   bool? _filterBranchBillingEnabled;
-  String? _filterBranchCai;
   bool? _filterBranchIsActive;
+  String? _filterSortOrder;
 
   // User Filters
   String? _filterUserRole;
   bool? _filterUserIsActive;
+
+  // Operations - Vehicle Filters
+  String _vehicleSearchQuery = '';
+  String? _vehicleStatusFilter;
 
   // Metadata for Menu Items
   final List<Map<String, dynamic>> _menuItems = [
@@ -58,9 +65,9 @@ class _DataInspectorScreenState extends State<DataInspectorScreen>
       'index': 1,
     },
     {
-      'title': 'Finanzas',
-      'icon': Icons.attach_money_rounded,
-      'color': Colors.green,
+      'title': 'Auditoría',
+      'icon': Icons.history_edu_rounded,
+      'color': Colors.purple,
       'index': 2,
     },
   ];
@@ -69,6 +76,7 @@ class _DataInspectorScreenState extends State<DataInspectorScreen>
   void initState() {
     super.initState();
     _orgTabController = TabController(length: 3, vsync: this);
+    _opsTabController = TabController(length: 3, vsync: this);
     _orgTabController.addListener(() {
       setState(() {
         // Rebuild to update AppBar title/actions if needed based on internal tab
@@ -87,43 +95,42 @@ class _DataInspectorScreenState extends State<DataInspectorScreen>
   @override
   void dispose() {
     _orgTabController.dispose();
+    _opsTabController.dispose();
     super.dispose();
   }
 
-  void _showOrganizationFilters() {
+  void _showFilters() {
     final provider = context.read<DataInspectorProvider>();
-    // If we are in "Company" tab (index 0), maybe show nothing or generic.
-    // If in "Branches" (index 1)
-    // If in "Users" (index 2)
-
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      isScrollControlled: true, // Allow full height if needed
-      builder: (ctx) => OrganizationFilterSheet(
-        tabIndex: _orgTabController.index,
-
-        // Pass current values
-        currentBranchId: provider.selectedBranchId,
-        currentBillingEnabled: _filterBranchBillingEnabled,
-        currentCai: _filterBranchCai,
-        currentIsActive: _filterBranchIsActive,
-        currentUserRole: _filterUserRole,
-
+      builder: (context) => DataInspectorFilterSheet(
+        tabIndex: _selectedIndex ?? 0,
+        subTabIndex: _selectedIndex == 0 ? _orgTabController.index : 0,
         branches: provider.branches,
-        fiscalConfigs: provider.fiscalConfigs,
 
-        onApply: ({branchId, role, billingEnabled, cai, isActive}) {
+        // Pass current value
+        currentBranchId: provider.selectedBranchId,
+
+        // Pass specific filters
+        currentBillingEnabled: _filterBranchBillingEnabled,
+        currentIsActive: _filterBranchIsActive,
+        currentSortOrder: _filterSortOrder,
+        currentUserRole: _filterUserRole, // For Users Tab
+
+        onApply: ({branchId, billingEnabled, isActive, role, sortOrder}) {
           setState(() {
-            // Apply based on active tab mostly, but some might be shared?
-            // OrganizationFilterSheet callback sends all.
-            provider.setSelectedBranch(branchId); // Sync with provider
+            // Apply Global Branch Filter
+            if (provider.selectedBranchId != branchId) {
+              provider.setSelectedBranch(branchId);
+            }
 
+            // Apply specific filters based on context
             if (_orgTabController.index == 1) {
-              // Branches Context
               _filterBranchBillingEnabled = billingEnabled;
-              _filterBranchCai = cai;
               _filterBranchIsActive = isActive;
+              _filterSortOrder = sortOrder;
             } else if (_orgTabController.index == 2) {
               // Users Context
               _filterUserRole = role;
@@ -158,9 +165,8 @@ class _DataInspectorScreenState extends State<DataInspectorScreen>
                 color: Colors.black87,
               ), // Standard back to close screen
         actions: [
-          if (_selectedIndex == 0 &&
-              _orgTabController.index !=
-                  0) // Show filter only for Organization (and not Company tab)
+          // Filter Button - Visible only in sub-sections (excluding Operations/Vehicles which has own filter)
+          if (_selectedIndex != null && _selectedIndex != 1)
             IconButton(
               icon: Icon(
                 Icons.filter_list_alt,
@@ -168,7 +174,7 @@ class _DataInspectorScreenState extends State<DataInspectorScreen>
                     ? Colors.blue
                     : Colors.black87,
               ),
-              onPressed: _showOrganizationFilters,
+              onPressed: _showFilters,
             ),
         ],
         backgroundColor: Colors.white,
@@ -186,7 +192,6 @@ class _DataInspectorScreenState extends State<DataInspectorScreen>
     if (provider.selectedBranchId != null) return true;
     if (_orgTabController.index == 1) {
       return _filterBranchBillingEnabled != null ||
-          _filterBranchCai != null ||
           _filterBranchIsActive != null;
     }
     if (_orgTabController.index == 2) {
@@ -213,15 +218,26 @@ class _DataInspectorScreenState extends State<DataInspectorScreen>
           provider: provider,
           tabController: _orgTabController,
           filterBranchBillingEnabled: _filterBranchBillingEnabled,
-          filterBranchCai: _filterBranchCai,
           filterBranchIsActive: _filterBranchIsActive,
+          filterSortOrder: _filterSortOrder,
           filterUserRole: _filterUserRole,
           filterUserIsActive: _filterUserIsActive,
         );
       case 1:
-        return _OperationsTab(provider: provider);
+        return _OperationsTab(
+          provider: provider,
+          tabController: _opsTabController,
+          searchQuery: _vehicleSearchQuery,
+          statusFilter: _vehicleStatusFilter,
+          onFilterChanged: (query, status) {
+            setState(() {
+              _vehicleSearchQuery = query;
+              _vehicleStatusFilter = status;
+            });
+          },
+        );
       case 2:
-        return _FinanceTab(provider: provider);
+        return _AuditTab(provider: provider);
       default:
         return const Center(child: Text('Opción no válida'));
     }
@@ -324,8 +340,8 @@ class _OrganizationTabContent extends StatelessWidget {
   final TabController tabController;
 
   final bool? filterBranchBillingEnabled;
-  final String? filterBranchCai;
   final bool? filterBranchIsActive;
+  final String? filterSortOrder;
 
   final String? filterUserRole;
   final bool? filterUserIsActive;
@@ -334,8 +350,8 @@ class _OrganizationTabContent extends StatelessWidget {
     required this.provider,
     required this.tabController,
     this.filterBranchBillingEnabled,
-    this.filterBranchCai,
     this.filterBranchIsActive,
+    this.filterSortOrder,
     this.filterUserRole,
     this.filterUserIsActive,
   });
@@ -349,7 +365,7 @@ class _OrganizationTabContent extends StatelessWidget {
     // --- FILTER LOGIC ---
 
     // 1. BRANCHES
-    List<BranchModel> displayedBranches = provider.branches;
+    List<Branch> displayedBranches = provider.branches;
     // Filter by Selected Branch (Provider)
     if (provider.selectedBranchId != null) {
       displayedBranches = displayedBranches
@@ -364,23 +380,25 @@ class _OrganizationTabContent extends StatelessWidget {
         orElse: () => <String, dynamic>{},
       );
       final hasBilling = config.isNotEmpty;
-      final cai = hasBilling ? config['cai'] : null;
 
       if (filterBranchBillingEnabled != null) {
         if (filterBranchBillingEnabled == true && !hasBilling) return false;
         if (filterBranchBillingEnabled == false && hasBilling) return false;
       }
 
-      if (filterBranchCai != null) {
-        if (cai != filterBranchCai) return false;
-      }
-
       // filterBranchIsActive -> No field in model, ignored for now or assume always active
       return true;
     }).toList();
 
+    // Sort Branches
+    if (filterSortOrder == 'asc') {
+      displayedBranches.sort((a, b) => a.name.compareTo(b.name));
+    } else if (filterSortOrder == 'desc') {
+      displayedBranches.sort((a, b) => b.name.compareTo(a.name));
+    }
+
     // 2. USERS
-    List<UserModel> displayedUsers = provider.users;
+    List<UserEntity> displayedUsers = provider.users;
     // Filter by Role
     if (filterUserRole != null) {
       displayedUsers = displayedUsers
@@ -560,9 +578,9 @@ class _OrganizationTabContent extends StatelessWidget {
 
                   final u = displayedUsers[index];
                   // Find branch name
-                  final branch = provider.branches.firstWhere(
+                  final branch = provider.branches.cast<Branch>().firstWhere(
                     (b) => b.id == u.branchId,
-                    orElse: () => BranchModel(
+                    orElse: () => Branch(
                       id: '',
                       name: 'Sin Asignar',
                       establishmentNumber: '',
@@ -775,7 +793,18 @@ class _InfoCard extends StatelessWidget {
 
 class _OperationsTab extends StatelessWidget {
   final DataInspectorProvider provider;
-  const _OperationsTab({required this.provider});
+  final TabController tabController;
+  final String searchQuery;
+  final String? statusFilter;
+  final Function(String, String?) onFilterChanged;
+
+  const _OperationsTab({
+    required this.provider,
+    required this.tabController,
+    required this.searchQuery,
+    required this.statusFilter,
+    required this.onFilterChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -787,170 +816,262 @@ class _OperationsTab extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Vehicles Section
-          _SectionHeader(
-            title: 'Vehículos Registrados (${vehicles.length})',
-            icon: Icons.directions_car,
+    // Filter Vehicles Logic
+    final filteredVehicles = vehicles.where((v) {
+      final matchesSearch =
+          searchQuery.isEmpty ||
+          v.clientName.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          (v.plate?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false);
+
+      final matchesStatus = statusFilter == null || v.status == statusFilter;
+
+      return matchesSearch && matchesStatus;
+    }).toList();
+
+    return Column(
+      children: [
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: tabController,
+            labelColor: Colors.orange,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: Colors.orange,
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+            tabs: const [
+              Tab(text: 'Vehículos', icon: Icon(Icons.directions_car)),
+              Tab(text: 'Servicios', icon: Icon(Icons.local_car_wash)),
+              Tab(text: 'Productos', icon: Icon(Icons.shopping_bag)),
+            ],
           ),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('Placa')),
-                  DataColumn(label: Text('Marca/Modelo')),
-                  DataColumn(label: Text('Cliente')),
-                  DataColumn(label: Text('Fecha Ingreso')),
-                  DataColumn(label: Text('Estado')),
-                ],
-                rows: vehicles.take(50).map((v) {
-                  // Limit view to 50 for performance
-                  return DataRow(
-                    cells: [
-                      DataCell(
-                        Text(
-                          v.plate ?? 'N/A',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataCell(Text(v.brand ?? 'Unknown')),
-                      DataCell(Text(v.clientName)),
-                      DataCell(Text(v.entryDate.toString().split('.')[0])),
-                      DataCell(
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getStatusColor(
-                              v.status,
-                            ).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            v.status.toUpperCase(),
-                            style: TextStyle(
-                              color: _getStatusColor(v.status),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: tabController,
+            children: [
+              // 1. VEHICLES TAB
+              Column(
+                children: [
+                  // Filters Section
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    color: Colors.white,
+                    child: Column(
+                      children: [
+                        TextField(
+                          onChanged: (val) =>
+                              onFilterChanged(val, statusFilter),
+                          decoration: InputDecoration(
+                            hintText: 'Buscar por cliente o placa...',
+                            prefixIcon: const Icon(Icons.search),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 0,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
+                          controller: TextEditingController(text: searchQuery)
+                            ..selection = TextSelection.fromPosition(
+                              TextPosition(offset: searchQuery.length),
+                            ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String>(
+                          decoration: InputDecoration(
+                            labelText: 'Filtrar por Estado',
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          key: ValueKey(statusFilter),
+                          initialValue: statusFilter,
+                          items: const [
+                            DropdownMenuItem(value: null, child: Text('Todos')),
+                            DropdownMenuItem(
+                              value: 'pending',
+                              child: Text('Pendiente'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'washing',
+                              child: Text('Lavando'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'finished',
+                              child: Text('Terminado'),
+                            ),
+                          ],
+                          onChanged: (val) => onFilterChanged(searchQuery, val),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            columns: const [
+                              DataColumn(label: Text('Tipo')),
+                              DataColumn(label: Text('Cliente')),
+                              DataColumn(label: Text('Ingreso')),
+                              DataColumn(label: Text('Estado')),
+                            ],
+                            rows: filteredVehicles.take(100).map((v) {
+                              return DataRow(
+                                cells: [
+                                  DataCell(
+                                    Text(v.vehicleType?.toUpperCase() ?? 'N/A'),
+                                  ),
+                                  DataCell(Text(v.clientName)),
+                                  DataCell(
+                                    Text(
+                                      DateFormat(
+                                        'dd/MM HH:mm',
+                                      ).format(v.entryDate),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _getStatusColor(
+                                          v.status,
+                                        ).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        v.status.toUpperCase(),
+                                        style: TextStyle(
+                                          color: _getStatusColor(v.status),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+                ],
+              ),
+
+              // 2. SERVICES TAB
+              ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: services.length,
+                itemBuilder: (ctx, i) {
+                  final s = services[i];
+                  return Card(
+                    elevation: 0,
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      side: BorderSide(color: Colors.grey.shade200),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: s.isActive
+                            ? Colors.green[50]
+                            : Colors.red[50],
+                        child: Icon(
+                          Icons.water_drop,
+                          color: s.isActive ? Colors.green : Colors.red,
+                        ),
+                      ),
+                      title: Text(
+                        s.name,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text('${s.category} • ${s.description}'),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'Precios:',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Text(
+                            '${s.prices.length} Tarifas',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
-                }).toList(),
+                },
               ),
-            ),
-          ),
 
-          const SizedBox(height: 24),
-
-          // Services Section
-          _SectionHeader(
-            title: 'Catálogo de Servicios (${services.length})',
-            icon: Icons.local_car_wash,
-          ),
-          const SizedBox(height: 8),
-          ...services.map(
-            (s) => Card(
-              elevation: 0,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                side: BorderSide(color: Colors.grey.shade200),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: s.isActive
-                      ? Colors.green[50]
-                      : Colors.red[50],
-                  child: Icon(
-                    Icons.water_drop,
-                    color: s.isActive ? Colors.green : Colors.red,
-                  ),
-                ),
-                title: Text(
-                  s.name,
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text('${s.category} • ${s.description}'),
-                trailing: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Precios:',
-                      style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              // 3. PRODUCTS TAB
+              ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: products.length,
+                itemBuilder: (ctx, i) {
+                  final p = products[i];
+                  return Card(
+                    elevation: 0,
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      side: BorderSide(color: Colors.grey.shade200),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    Text(
-                      '${s.prices.length} Tarifas',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: p.isActive
+                            ? Colors.blue[50]
+                            : Colors.red[50],
+                        child: Icon(
+                          Icons.inventory_2,
+                          color: p.isActive ? Colors.blue : Colors.red,
+                        ),
+                      ),
+                      title: Text(
+                        p.name,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text('${p.category} • ${p.description}'),
+                      trailing: Text(
+                        'L. ${p.price.toStringAsFixed(2)}',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.green[700],
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
-            ),
+            ],
           ),
-
-          const SizedBox(height: 24),
-
-          // Products Section
-          _SectionHeader(
-            title: 'Productos (${products.length})',
-            icon: Icons.shopping_bag,
-          ),
-          const SizedBox(height: 8),
-          ...products.map(
-            (p) => Card(
-              elevation: 0,
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                side: BorderSide(color: Colors.grey.shade200),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: p.isActive
-                      ? Colors.blue[50]
-                      : Colors.red[50],
-                  child: Icon(
-                    Icons.inventory_2,
-                    color: p.isActive ? Colors.blue : Colors.red,
-                  ),
-                ),
-                title: Text(
-                  p.name,
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text('${p.category} • ${p.description}'),
-                trailing: Text(
-                  'L. ${p.price.toStringAsFixed(2)}',
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.green[700],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -968,202 +1089,281 @@ class _OperationsTab extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  const _SectionHeader({required this.title, required this.icon});
+class _AuditTab extends StatelessWidget {
+  final DataInspectorProvider provider;
+
+  const _AuditTab({required this.provider});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.grey[700], size: 20),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: GoogleFonts.outfit(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
+    if (provider.selectedAuditUser != null) {
+      return _buildUserLogsView(context);
+    }
+    return _buildUsersListView(context);
+  }
+
+  Widget _buildUsersListView(BuildContext context) {
+    final users = provider.users.cast<UserEntity>();
+
+    if (users.isEmpty) {
+      return const Center(child: Text('No hay usuarios registrados.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: users.length,
+      itemBuilder: (context, index) {
+        final user = users[index];
+        return Card(
+          elevation: 0,
+          color: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.shade200),
           ),
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: CircleAvatar(
+              backgroundColor: Colors.blueGrey[700],
+              child: Text(
+                user.name.substring(0, 1).toUpperCase(),
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+            title: Text(
+              user.name,
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              user.role == 'admin' ? 'Administrador' : 'Empleado',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () {
+              provider.fetchAuditLogsForUser(user);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildUserLogsView(BuildContext context) {
+    final logs = provider.auditLogs;
+    final selectedUser = provider.selectedAuditUser;
+
+    return Column(
+      children: [
+        // Header with Back Button
+        Container(
+          padding: const EdgeInsets.all(16),
+          color: Colors.white,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  provider.clearSelectedAuditUser();
+                },
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Historial de:',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    Text(
+                      selectedUser?.name ?? 'Usuario',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+
+        // Logs List
+        Expanded(
+          child: logs.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No hay registros para este usuario.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: logs.length,
+                  itemBuilder: (context, index) {
+                    final log = logs[index];
+                    return _AuditLogCard(
+                      log: log,
+                      user: selectedUser!,
+                      provider: provider,
+                    );
+                  },
+                ),
         ),
       ],
     );
   }
 }
 
-class _FinanceTab extends StatelessWidget {
+class _AuditLogCard extends StatelessWidget {
+  final AuditLog log;
+  final UserEntity user;
   final DataInspectorProvider provider;
-  const _FinanceTab({required this.provider});
 
-  @override
-  Widget build(BuildContext context) {
-    final invoices = provider.invoices;
-
-    if (provider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (invoices.isEmpty) {
-      return const Center(
-        child: Text(
-          'No hay facturas registradas (o faltan permisos de índice).',
-        ),
-      );
-    }
-
-    // Calculate Totals
-    final totalBilled = invoices.fold(
-      0.0,
-      (acc, inv) => acc + (inv['total'] ?? 0),
-    );
-    final totalCount = invoices.length;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // KPI Cards
-          Row(
-            children: [
-              Expanded(
-                child: _KpiCard(
-                  title: 'Facturación Total',
-                  value: 'L. ${totalBilled.toStringAsFixed(2)}',
-                  icon: Icons.attach_money,
-                  color: Colors.green,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _KpiCard(
-                  title: 'Facturas Emitidas',
-                  value: '$totalCount',
-                  icon: Icons.receipt,
-                  color: Colors.blue,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          _SectionHeader(
-            title: 'Historial de Facturación',
-            icon: Icons.table_chart,
-          ),
-          const SizedBox(height: 8),
-
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('Fecha')),
-                  DataColumn(label: Text('Factura #')),
-                  DataColumn(label: Text('Cliente')),
-                  DataColumn(label: Text('CAI')),
-                  DataColumn(label: Text('Monto')),
-                ],
-                rows: invoices.take(100).map((inv) {
-                  final date = (inv['fecha_creacion'] as Timestamp).toDate();
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(DateFormat('dd/MM HH:mm').format(date))),
-                      DataCell(
-                        Text(
-                          inv['numero_factura'] ?? 'N/A',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataCell(
-                        Text(inv['cliente_nombre'] ?? 'Consumidor Final'),
-                      ),
-                      DataCell(
-                        Text(
-                          (inv['cai'] as String?)?.substring(0, 8) ?? '...',
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                          'L. ${(inv['total'] as num).toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KpiCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _KpiCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
+  const _AuditLogCard({
+    required this.log,
+    required this.user,
+    required this.provider,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+    final dateStr = DateFormat('dd/MM/yyyy HH:mm:ss').format(log.timestamp);
+
+    // Lookup Branch
+    final branch = provider.branches.cast<Branch>().firstWhere(
+      (b) => b.id == log.branchId,
+      orElse: () => Branch(
+        id: '',
+        name: 'Global / Sin Sucursal',
+        establishmentNumber: '',
+        companyId: '',
+        address: '',
+        phone: '',
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  overflow: TextOverflow.ellipsis,
+    );
+
+    IconData iconData = Icons.info_outline;
+    Color iconColor = Colors.grey;
+
+    if (log.action.contains('CREATE')) {
+      iconData = Icons.add_circle_outline;
+      iconColor = Colors.green;
+    } else if (log.action.contains('UPDATE')) {
+      iconData = Icons.edit_outlined;
+      iconColor = Colors.blue;
+    } else if (log.action.contains('DELETE')) {
+      iconData = Icons.delete_outline;
+      iconColor = Colors.red;
+    } else {
+      iconData = Icons.history;
+      iconColor = Colors.purple;
+    }
+
+    final actionDesc = _getActionDescription(log);
+
+    return Card(
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: CircleAvatar(
+          backgroundColor: iconColor.withValues(alpha: 0.1),
+          child: Icon(iconData, color: iconColor),
+        ),
+        title: Text(
+          actionDesc,
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.store, size: 14, color: Colors.grey),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    branch.name,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              dateStr,
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+        onTap: () => _showLogDetails(context, branch, actionDesc),
+      ),
+    );
+  }
+
+  String _getActionDescription(AuditLog log) {
+    if (log.action == 'UPDATE_VEHICLE_STATUS') {
+      final newStatus = log.details['newStatus'] ?? '?';
+      return 'Cambio de Estado a "${newStatus.toUpperCase()}"';
+    }
+    if (log.action == 'CREATE_CLIENT') {
+      final name = log.details['nombre_completo'] ?? 'Cliente';
+      return 'Creó Cliente: $name';
+    }
+    if (log.action == 'CREATE_VEHICLE') {
+      final client = log.details['client'] ?? 'Cliente';
+      return 'Ingresó Vehículo de $client';
+    }
+    return log.action.replaceAll('_', ' ');
+  }
+
+  void _showLogDetails(BuildContext context, Branch branch, String actionDesc) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Detalle de Auditoría',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DetailLine('Acción:', actionDesc),
+              const Divider(),
+              _DetailLine('Usuario:', user.name),
+              _DetailLine(
+                'Rol:',
+                user.role == 'admin' ? 'Administrador' : 'Empleado',
+              ),
+              const Divider(),
+              _DetailLine('Sucursal:', branch.name),
+              if (branch.establishmentNumber.isNotEmpty)
+                _DetailLine('Establecimiento:', branch.establishmentNumber),
+              const Divider(),
+              _DetailLine(
+                'Fecha:',
+                DateFormat('dd/MM/yyyy HH:mm:ss').format(log.timestamp),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: GoogleFonts.outfit(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cerrar'),
           ),
         ],
       ),
@@ -1171,5 +1371,27 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// Quick alias to avoid fixing imports everywhere
-// final stdColors = Colors.cyan; // Just a dummy, using Colors directly
+class _DetailLine extends StatelessWidget {
+  final String label;
+  final String value;
+  const _DetailLine(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: RichText(
+        text: TextSpan(
+          style: const TextStyle(color: Colors.black87, fontSize: 13),
+          children: [
+            TextSpan(
+              text: '$label ',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            TextSpan(text: value),
+          ],
+        ),
+      ),
+    );
+  }
+}

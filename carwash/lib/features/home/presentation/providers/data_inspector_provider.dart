@@ -1,17 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../company/data/models/company_model.dart';
-import '../../../branch/data/models/branch_model.dart';
-import '../../../auth/data/models/user_model.dart';
-import '../../../entry/data/models/vehicle_model.dart';
-import '../../../wash_types/data/models/wash_type_model.dart';
-import '../../../products/data/models/product_model.dart';
+import '../../../company/domain/entities/company.dart';
+import '../../../branch/domain/entities/branch.dart';
+import '../../../auth/domain/entities/user_entity.dart';
+import '../../../entry/domain/entities/vehicle.dart';
+import '../../../wash_types/domain/entities/wash_type.dart';
+import '../../../products/domain/entities/product.dart';
+
+import '../../../company/domain/repositories/company_repository.dart';
+import '../../../branch/domain/repositories/branch_repository.dart';
+import '../../../auth/domain/repositories/auth_repository.dart';
+import '../../../entry/domain/repositories/vehicle_entry_repository.dart';
+import '../../../wash_types/domain/repositories/wash_type_repository.dart';
+import '../../../products/domain/repositories/product_repository.dart';
+import '../../../audit/domain/repositories/audit_repository.dart';
+import '../../../audit/domain/entities/audit_log.dart';
 // import '../../../billing/data/models/invoice_model.dart';
 // import '../../../branch/domain/entities/branch.dart';
 // import '../../../../core/utils/start_end_date_utils.dart';
 
 class DataInspectorProvider extends ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final CompanyRepository _companyRepository;
+  final BranchRepository _branchRepository;
+  final AuthRepository _authRepository;
+  final VehicleEntryRepository _vehicleRepository;
+  final WashTypeRepository _washTypeRepository;
+  final ProductRepository _productRepository;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance; // Temporary for fiscal config (needs repo)
+
+  DataInspectorProvider({
+    required CompanyRepository companyRepository,
+    required BranchRepository branchRepository,
+    required AuthRepository authRepository,
+    required VehicleEntryRepository vehicleRepository,
+    required WashTypeRepository washTypeRepository,
+    required ProductRepository productRepository,
+    required AuditRepository auditRepository,
+  }) : _companyRepository = companyRepository,
+       _branchRepository = branchRepository,
+       _authRepository = authRepository,
+       _vehicleRepository = vehicleRepository,
+       _washTypeRepository = washTypeRepository,
+       _productRepository = productRepository,
+       _auditRepository = auditRepository;
+
+  final AuditRepository _auditRepository;
 
   // Global Filter
   String? _selectedBranchId;
@@ -21,19 +55,23 @@ class DataInspectorProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   // Data Containers
-  // Data Containers
-  CompanyModel? company;
-  List<BranchModel> branches = [];
-  List<UserModel> users = [];
-  List<VehicleModel> vehicles = [];
-  List<WashTypeModel> washTypes = [];
-  List<ProductModel> products = [];
-  List<Map<String, dynamic>> invoices = [];
+  Company? company;
+  List<Branch> branches = [];
+  List<UserEntity> users = [];
+  List<Vehicle> vehicles = [];
+  List<WashType> washTypes = [];
+  List<Product> products = [];
   List<Map<String, dynamic>> fiscalConfigs = [];
 
-  // Invoices? Might be heavy, maybe just fetch last 50 or by date.
-  // User requested "ABSOLUTELY ALL DATA".
-  // We'll fetch all but be mindful.
+  // Audit State
+  List<AuditLog> auditLogs = [];
+  UserEntity? _selectedAuditUser;
+  UserEntity? get selectedAuditUser => _selectedAuditUser;
+
+  void clearSelectedAuditUser() {
+    _selectedAuditUser = null;
+    notifyListeners();
+  }
 
   // Error State
   String? errorMessage;
@@ -64,81 +102,26 @@ class DataInspectorProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Fetch Company (Always)
-      final companyDoc = await _firestore.collection('empresas').doc(cid).get();
-      if (companyDoc.exists) {
-        company = CompanyModel.fromFirestore(companyDoc);
-      }
+      // 1. Fetch Company
+      company = await _companyRepository.getCompany(cid);
 
       // 2. Fetch Branches
-      final branchSnaps = await _firestore
-          .collection('sucursales')
-          .where('empresa_id', isEqualTo: cid)
-          .get();
-      branches = branchSnaps.docs
-          .map((d) => BranchModel.fromFirestore(d))
-          .toList();
+      branches = await _branchRepository.getBranches(cid);
 
       // 3. Fetch Users
-      Query userQuery = _firestore
-          .collection('usuarios')
-          .where('empresa_id', isEqualTo: cid);
-      if (_selectedBranchId != null) {
-        userQuery = userQuery.where(
-          'sucursal_id',
-          isEqualTo: _selectedBranchId,
-        );
-      }
-      final userSnaps = await userQuery.get();
-      users = userSnaps.docs.map((d) => UserModel.fromFirestore(d)).toList();
+      users = await _authRepository.getUsers(cid, branchId: _selectedBranchId);
 
       // 4. Fetch Vehicles
-      // Note: Vehicles might not have 'sucursal_id' directly indexed or named differently.
-      // Based on previous files, it seems vehicles have 'sucursal_id'.
-      Query vehicleQuery = _firestore
-          .collection('vehiculos')
-          .where('empresa_id', isEqualTo: cid);
-      if (_selectedBranchId != null) {
-        vehicleQuery = vehicleQuery.where(
-          'sucursal_id',
-          isEqualTo: _selectedBranchId,
-        );
-      }
-      // Limit to last 500 to avoid crash? Or fetch all as requested?
-      // "ABSOLUTAMENTE TODOS".
-      final vehicleSnaps = await vehicleQuery
-          .orderBy('fecha_ingreso', descending: true)
-          .get();
-      vehicles = vehicleSnaps.docs
-          .map((d) => VehicleModel.fromFirestore(d))
-          .toList();
-
-      // 5. Fetch Invoices (Facturas)
-      // Assuming 'facturas' collection
-      Query invoiceQuery = _firestore
-          .collection('facturas')
-          .where('empresa_id', isEqualTo: cid);
-      if (_selectedBranchId != null) {
-        invoiceQuery = invoiceQuery.where(
-          'sucursal_id',
-          isEqualTo: _selectedBranchId,
-        );
-      }
-      final invoiceSnaps = await invoiceQuery
-          .orderBy('fecha_creacion', descending: true)
-          .get();
-      // Parsing to generic map for now to allow inspection of raw data even if model is partial
-      invoices = invoiceSnaps.docs.map((d) {
-        final data = d.data() as Map<String, dynamic>;
-        data['id'] = d.id; // Inject ID
-        return data;
-      }).toList();
+      vehicles = await _vehicleRepository.getVehicles(
+        cid,
+        branchId: _selectedBranchId,
+      );
 
       // 5. Fetch all Fiscal Configs to see who is billing
+      // 5. Fetch all Fiscal Configs to see who is billing
+      // Note: Idealmente mover a un repositorio dedicado en el futuro
       final fiscalSnaps = await _firestore
-          .collection(
-            'facturacion',
-          ) // Check collection name in rules, it was 'facturacion'
+          .collection('facturacion')
           .where('empresa_id', isEqualTo: cid)
           .where('activo', isEqualTo: true) // Only interested in active configs
           .get();
@@ -150,22 +133,42 @@ class DataInspectorProvider extends ChangeNotifier {
       }).toList();
 
       // 6. Fetch Wash Types (Services)
-      final washTypeSnaps = await _firestore
-          .collection('tiposLavados')
-          .where('empresa_id', isEqualTo: cid)
-          .get();
-      washTypes = washTypeSnaps.docs
-          .map((d) => WashTypeModel.fromFirestore(d))
-          .toList();
+      washTypes = await _washTypeRepository.getWashTypes(companyId: cid);
 
       // 7. Fetch Products
-      final productSnaps = await _firestore
-          .collection('productos')
-          .where('empresa_id', isEqualTo: cid)
-          .get();
-      products = productSnaps.docs
-          .map((d) => ProductModel.fromFirestore(d))
-          .toList();
+      products = await _productRepository.getProducts(cid);
+
+      // 8. Fetch Audit Logs
+      auditLogs = await _auditRepository.getAuditLogs(
+        cid,
+        branchId: _selectedBranchId,
+        limit: 50,
+      );
+    } catch (e) {
+      errorMessage = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchAuditLogsForUser(UserEntity user) async {
+    final cid = company?.id;
+    if (cid == null) return;
+
+    _selectedAuditUser = user;
+    // Don't notify yet, wait for loading to start
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      auditLogs = await _auditRepository.getAuditLogs(
+        cid,
+        userId: user.id,
+        branchId: _selectedBranchId,
+        limit: 50,
+      );
     } catch (e) {
       errorMessage = e.toString();
     } finally {
