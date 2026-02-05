@@ -150,17 +150,28 @@ class _UserListScreenState extends State<UserListScreen> {
 
   void _showEditUserDialog(BuildContext context, UserEntity user) {
     final provider = context.read<UserManagementProvider>();
-    final companyId = context.read<AuthProvider>().currentUser?.companyId;
+    final currentUser = context.read<AuthProvider>().currentUser;
+    final companyId = currentUser?.companyId;
+    final operatorId = currentUser?.id;
     final nameController = TextEditingController(text: user.name);
     final emissionPointController = TextEditingController(
       text: user.emissionPoint ?? '001',
     );
     String? selectedBranchId = user.branchId;
+    bool isLoading = false;
+    String? localError;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) {
+          // Safe Branch Init checks if the user's branch is still valid in the list
+          // If not, we nullify it to force re-selection, avoiding crash
+          if (selectedBranchId != null &&
+              !provider.branches.any((b) => b.id == selectedBranchId)) {
+            selectedBranchId = null;
+          }
+
           return AlertDialog(
             title: const Text('Editar Usuario'),
             content: SingleChildScrollView(
@@ -184,7 +195,7 @@ class _UserListScreenState extends State<UserListScreen> {
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(labelText: 'Sucursal'),
-                    initialValue: selectedBranchId,
+                    value: selectedBranchId,
                     items: provider.branches.map((branch) {
                       return DropdownMenuItem(
                         value: branch.id,
@@ -197,70 +208,136 @@ class _UserListScreenState extends State<UserListScreen> {
                       });
                     },
                   ),
+                  if (localError != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      localError!,
+                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                    ),
+                  ],
                 ],
               ),
             ),
             actions: [
-              TextButton(
-                onPressed: () async {
-                  // Delete Confirmation
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (c) => AlertDialog(
-                      title: const Text('Eliminar Usuario'),
-                      content: const Text(
-                        '¿Estás seguro de que deseas eliminar este usuario?',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(c, false),
-                          child: const Text('Cancelar'),
+              if (!isLoading)
+                TextButton(
+                  onPressed: () async {
+                    // Delete Confirmation
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text('Eliminar Usuario'),
+                        content: const Text(
+                          '¿Estás seguro de que deseas eliminar este usuario?',
                         ),
-                        TextButton(
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c, false),
+                            child: const Text('Cancelar'),
                           ),
-                          onPressed: () => Navigator.pop(c, true),
-                          child: const Text('Eliminar'),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm == true && companyId != null && ctx.mounted) {
-                    final success = await provider.deleteUser(
-                      userId: user.id,
-                      companyId: companyId,
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                            ),
+                            onPressed: () => Navigator.pop(c, true),
+                            child: const Text('Eliminar'),
+                          ),
+                        ],
+                      ),
                     );
-                    if (success && ctx.mounted) Navigator.pop(ctx);
-                  }
-                },
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Eliminar'),
-              ),
+
+                    if (confirm == true && companyId != null && ctx.mounted) {
+                      setState(() => isLoading = true);
+                      final success = await provider.deleteUser(
+                        userId: user.id,
+                        companyId: companyId,
+                        operatorId: operatorId,
+                      );
+                      if (success && ctx.mounted) {
+                        Navigator.pop(ctx);
+                      } else {
+                        if (ctx.mounted) {
+                          setState(() {
+                            isLoading = false;
+                            localError =
+                                provider.errorMessage ?? 'Error al eliminar';
+                          });
+                        }
+                      }
+                    }
+                  },
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  child: const Text('Eliminar'),
+                ),
               TextButton(
-                onPressed: () => Navigator.pop(ctx),
+                onPressed: isLoading ? null : () => Navigator.pop(ctx),
                 child: const Text('Cancelar'),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  if (companyId != null) {
-                    final success = await provider.updateUser(
-                      userId: user.id,
-                      name: nameController.text.trim(),
-                      branchId: selectedBranchId,
-                      companyId: companyId,
-                      // Force null if not admin, otherwise use controller value
-                      emissionPoint: user.role == 'admin'
-                          ? emissionPointController.text.trim()
-                          : null,
-                    );
-                    if (success && ctx.mounted) {
-                      Navigator.pop(ctx);
-                    }
-                  }
-                },
-                child: const Text('Guardar'),
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        if (selectedBranchId == null) {
+                          setState(
+                            () => localError = 'Seleccione una sucursal',
+                          );
+                          return;
+                        }
+                        if (companyId != null) {
+                          setState(() {
+                            isLoading = true;
+                            localError = null;
+                          });
+
+                          final success = await provider.updateUser(
+                            userId: user.id,
+                            name: nameController.text.trim(),
+                            branchId: selectedBranchId,
+                            companyId: companyId,
+                            // Force null if not admin, otherwise use controller value
+                            emissionPoint: user.role == 'admin'
+                                ? emissionPointController.text.trim()
+                                : null,
+                            operatorId: operatorId,
+                          );
+
+                          if (success && ctx.mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Usuario actualizado exitosamente',
+                                ),
+                              ),
+                            );
+                          } else {
+                            if (ctx.mounted) {
+                              setState(() {
+                                isLoading = false;
+                                localError =
+                                    provider.errorMessage ??
+                                    'Error al actualizar';
+                              });
+                            }
+                          }
+                        } else {
+                          // Company ID is null
+                          setState(() {
+                            localError =
+                                'Error: No se encontró ID de empresa. Cierre sesión e intente de nuevo.';
+                          });
+                        }
+                      },
+                child: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Guardar'),
               ),
             ],
           );

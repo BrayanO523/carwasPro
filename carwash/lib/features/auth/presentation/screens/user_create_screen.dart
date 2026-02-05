@@ -30,10 +30,14 @@ class _UserCreateScreenState extends State<UserCreateScreen> {
 
     final provider = context.read<UserManagementProvider>();
     final companyId = context.read<AuthProvider>().currentUser?.companyId;
+    final operatorId = context.read<AuthProvider>().currentUser?.id;
 
     if (companyId == null) return;
 
-    final success = await provider.createUser(companyId: companyId);
+    final success = await provider.createUser(
+      companyId: companyId,
+      operatorId: operatorId,
+    );
 
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

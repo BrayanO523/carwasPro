@@ -12,6 +12,7 @@ abstract class AuthRepository {
     required String role,
     String? branchId,
     String? emissionPoint,
+    String? operatorId,
   });
 
   Future<UserEntity?> registerOwner({
@@ -20,7 +21,7 @@ abstract class AuthRepository {
     required String companyId,
     required String name,
     required String branchId,
-    String? emissionPoint, // Added emissionPoint
+    String? emissionPoint,
   });
 
   Future<void> updateUser({
@@ -28,8 +29,10 @@ abstract class AuthRepository {
     required String name,
     String? branchId,
     String? emissionPoint,
+    String? operatorId,
   });
 
-  Future<void> deleteUser(String userId);
+  Future<void> deleteUser(String userId, {String? operatorId});
   Future<void> markFirstLoginComplete(String userId);
+  Future<List<UserEntity>> getUsers(String companyId, {String? branchId});
 }

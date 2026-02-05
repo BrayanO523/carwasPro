@@ -110,7 +110,10 @@ class UserManagementProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> createUser({required String companyId}) async {
+  Future<bool> createUser({
+    required String companyId,
+    String? operatorId,
+  }) async {
     if (nameController.text.isEmpty ||
         emailController.text.isEmpty ||
         passwordController.text.isEmpty ||
@@ -152,6 +155,7 @@ class UserManagementProvider extends ChangeNotifier {
         companyId: companyId,
         branchId: selectedBranchId,
         emissionPoint: emissionPoint,
+        operatorId: operatorId,
       );
 
       _users.add(newUser);
@@ -176,6 +180,7 @@ class UserManagementProvider extends ChangeNotifier {
     required String? branchId,
     required String companyId,
     String? emissionPoint,
+    String? operatorId,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -187,6 +192,7 @@ class UserManagementProvider extends ChangeNotifier {
         name: name,
         branchId: branchId,
         emissionPoint: emissionPoint,
+        operatorId: operatorId,
       );
 
       // Reload users to reflect changes
@@ -204,13 +210,14 @@ class UserManagementProvider extends ChangeNotifier {
   Future<bool> deleteUser({
     required String userId,
     required String companyId,
+    String? operatorId,
   }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      await _authRepository.deleteUser(userId);
+      await _authRepository.deleteUser(userId, operatorId: operatorId);
       // Reload users to reflect changes
       await loadUsers(companyId);
       return true;
