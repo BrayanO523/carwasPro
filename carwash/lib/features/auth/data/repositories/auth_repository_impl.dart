@@ -1,17 +1,27 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uuid/uuid.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/user_model.dart';
+import 'package:carwash/features/audit/domain/entities/audit_log.dart';
+import 'package:carwash/features/audit/domain/repositories/audit_repository.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
+  final AuditRepository _auditRepository;
 
-  AuthRepositoryImpl({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
-    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-      _firestore = firestore ?? FirebaseFirestore.instance;
+  AuthRepositoryImpl({
+    FirebaseAuth? firebaseAuth,
+    FirebaseFirestore? firestore,
+    AuditRepository? auditRepository,
+  }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+       _firestore = firestore ?? FirebaseFirestore.instance,
+       _auditRepository =
+           auditRepository ??
+           (throw ArgumentError('AuditRepository cannot be null'));
 
   @override
   Stream<UserEntity?> get authStateChanges {
@@ -60,7 +70,6 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  @override
   Future<UserEntity> createCompanyUser({
     required String email,
     required String password,
@@ -69,6 +78,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String role,
     String? branchId,
     String? emissionPoint,
+    String? operatorId,
   }) async {
     FirebaseApp? secondaryApp;
     try {
@@ -101,11 +111,28 @@ class AuthRepositoryImpl implements AuthRepository {
         name: name,
         branchId: branchId,
         emissionPoint: emissionPoint,
+        createdBy: operatorId,
+        createdAt: DateTime.now(),
       );
 
       // 4. Create user document in Firestore 'usuarios' collection
       // Ensure we use the main firestore instance, not one attached to secondary app implicitly
       await _firestore.collection('usuarios').doc(uid).set(newUser.toMap());
+
+      await _auditRepository.logEvent(
+        AuditLog(
+          id: const Uuid().v4(),
+          action: 'CREATE_USER',
+          collection: 'usuarios',
+          documentId: uid,
+          userId: operatorId ?? 'unknown',
+          userEmail: 'unknown',
+          timestamp: DateTime.now(),
+          details: newUser.toMap(),
+          companyId: companyId,
+          branchId: branchId,
+        ),
+      );
 
       await secondaryAuth.signOut();
       return newUser;
@@ -165,21 +192,65 @@ class AuthRepositoryImpl implements AuthRepository {
     required String name,
     String? branchId,
     String? emissionPoint,
+    String? operatorId,
   }) async {
+    // Get current doc to find companyId
+    final doc = await _firestore.collection('usuarios').doc(userId).get();
+    final companyId = doc.exists ? doc.get('empresa_id') : '';
+
     final updates = <String, dynamic>{
       'nombre': name,
       'sucursal_id': branchId,
       'punto_emision': emissionPoint,
+      'updatedBy': operatorId,
+      'updatedAt': DateTime.now(),
     };
     await _firestore.collection('usuarios').doc(userId).update(updates);
+
+    await _auditRepository.logEvent(
+      AuditLog(
+        id: const Uuid().v4(),
+        action: 'UPDATE_USER',
+        collection: 'usuarios',
+        documentId: userId,
+        userId: operatorId ?? 'unknown',
+        userEmail: 'unknown',
+        timestamp: DateTime.now(),
+        details: updates,
+        companyId: companyId,
+        branchId:
+            branchId, // Note: This might be the OLD branch or NEW branch. For update, usually current context matters.
+      ),
+    );
   }
 
   @override
-  Future<void> deleteUser(String userId) async {
+  Future<void> deleteUser(String userId, {String? operatorId}) async {
     // Note: This only deletes the Firestore document.
     // Deleting the Auth user requires Admin SDK or Cloud Functions in a real production app.
     // For this prototype, removing from Firestore is sufficient to hide them from the app.
+
+    // Get current doc to find companyId
+    final doc = await _firestore.collection('usuarios').doc(userId).get();
+    final companyId = doc.exists ? doc.get('empresa_id') : '';
+    final branchId = doc.exists ? doc.get('sucursal_id') : null;
+
     await _firestore.collection('usuarios').doc(userId).delete();
+
+    await _auditRepository.logEvent(
+      AuditLog(
+        id: const Uuid().v4(),
+        action: 'DELETE_USER',
+        collection: 'usuarios',
+        documentId: userId,
+        userId: operatorId ?? 'unknown',
+        userEmail: 'unknown',
+        timestamp: DateTime.now(),
+        details: {'deleted': true},
+        companyId: companyId,
+        branchId: branchId,
+      ),
+    );
   }
 
   @override
@@ -187,5 +258,22 @@ class AuthRepositoryImpl implements AuthRepository {
     await _firestore.collection('usuarios').doc(userId).update({
       'is_first_login': false,
     });
+  }
+
+  @override
+  Future<List<UserEntity>> getUsers(
+    String companyId, {
+    String? branchId,
+  }) async {
+    Query query = _firestore
+        .collection('usuarios')
+        .where('empresa_id', isEqualTo: companyId);
+
+    if (branchId != null) {
+      query = query.where('sucursal_id', isEqualTo: branchId);
+    }
+
+    final snapshot = await query.get();
+    return snapshot.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
   }
 }
