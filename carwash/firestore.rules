@@ -121,5 +121,34 @@ service cloud.firestore {
       allow update: if isSameCompany(resource.data) && isSameCompany(request.resource.data);
       allow delete: if isSameCompany(resource.data);
     }
+
+    // PAGOS (Payments)
+    match /pagos/{docId} {
+      allow read: if isSameCompany(resource.data);
+      allow create: if isSameCompany(request.resource.data);
+      allow update: if isSameCompany(resource.data) && isSameCompany(request.resource.data);
+    }
+
+    // AUDIT LOGS
+    match /audit_logs/{docId} {
+      allow read: if isSameCompany(resource.data);
+      allow create: if isSameCompany(request.resource.data);
+      // No updates or deletes allowed for audit logs to ensure integrity
+    }
+
+    // CREDITOS CLIENTES (Client Credits/Balances)
+    match /creditos_clientes/{docId} {
+      allow read: if isSameCompany(resource.data);
+      allow create: if isSameCompany(request.resource.data);
+      allow update: if isSameCompany(resource.data) && isSameCompany(request.resource.data);
+      allow delete: if isSameCompany(resource.data);
+    }
+
+    // FACTURACION HISTORIAL (Fiscal History)
+    match /facturacion_historial/{docId} {
+      allow read: if isSameBranch(resource.data);
+      allow create: if isSameBranch(request.resource.data);
+      allow update: if isSameBranch(resource.data) && isSameBranch(request.resource.data);
+    }
   }
 }
