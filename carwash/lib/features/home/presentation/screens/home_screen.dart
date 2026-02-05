@@ -1,3 +1,4 @@
+import 'package:carwash/core/constants/app_permissions.dart';
 import 'package:carwash/features/auth/presentation/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -91,7 +92,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final user = authProvider.currentUser;
 
     // Modern Color Palette
     final cardColors = [
@@ -145,21 +145,23 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisSpacing: 12,
               childAspectRatio: 1.15,
               children: [
-                _DashboardCard(
-                  title: 'Ingreso\nVehículo',
-                  icon: Icons.add_circle_rounded,
-                  color: cardColors[2],
-                  onTap: () => context.push('/vehicle-entry'),
-                  isPrimary: true,
-                ),
-                _DashboardCard(
-                  title: 'Vehículos\nActivos',
-                  icon: Icons.local_car_wash_rounded,
-                  color: cardColors[0], // Green
-                  onTap: () => context.push('/active-vehicles'),
-                  count: activeVehiclesCount,
-                ),
-                if (user?.role == 'admin')
+                if (authProvider.hasPermission(AppPermissions.createVehicle))
+                  _DashboardCard(
+                    title: 'Ingreso\nVehículo',
+                    icon: Icons.add_circle_rounded,
+                    color: cardColors[2],
+                    onTap: () => context.push('/vehicle-entry'),
+                    isPrimary: true,
+                  ),
+                if (authProvider.hasPermission(AppPermissions.viewVehicles))
+                  _DashboardCard(
+                    title: 'Vehículos\nActivos',
+                    icon: Icons.local_car_wash_rounded,
+                    color: cardColors[0], // Green
+                    onTap: () => context.push('/active-vehicles'),
+                    count: activeVehiclesCount,
+                  ),
+                if (authProvider.hasPermission(AppPermissions.viewBilling))
                   _DashboardCard(
                     title: 'Facturación',
                     icon: Icons.check_circle_rounded,
@@ -167,13 +169,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: () => context.push('/billing-list'),
                     count: readyToBillCount,
                   ),
-                if (user?.role == 'admin') ...[
+                if (authProvider.hasPermission(AppPermissions.viewBranches))
                   _DashboardCard(
                     title: 'Sucursales',
                     icon: Icons.store_rounded,
                     color: cardColors[3],
                     onTap: () => context.push('/branch-list'),
                   ),
+                if (authProvider.hasPermission(AppPermissions.viewReports)) ...[
                   _DashboardCard(
                     title: 'Balance',
                     icon: Icons.account_balance_wallet_rounded,
@@ -185,12 +188,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: Icons.analytics_rounded,
                     color: cardColors[4], // Purple
                     onTap: () => context.push('/data-inspector'),
-                  ),
-                  _DashboardCard(
-                    title: 'Cuentas\npor Cobrar',
-                    icon: Icons.request_quote_rounded,
-                    color: Colors.teal, // Teal for money
-                    onTap: () => context.push('/accounts-receivable'),
                   ),
                 ],
               ],
@@ -302,6 +299,13 @@ class _DashboardCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: Text(
                       count.toString(),
