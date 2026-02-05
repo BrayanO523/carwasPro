@@ -46,6 +46,7 @@ class BranchProvider extends ChangeNotifier {
     required String phone,
     required String companyId,
     String establishmentNumber = '000',
+    String? userId,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -59,6 +60,8 @@ class BranchProvider extends ChangeNotifier {
         phone: phone,
         companyId: companyId,
         establishmentNumber: establishmentNumber,
+        createdBy: userId,
+        createdAt: DateTime.now(),
       );
 
       await _repository.createBranch(newBranch);
@@ -80,6 +83,7 @@ class BranchProvider extends ChangeNotifier {
     required String phone,
     required String companyId,
     String establishmentNumber = '000',
+    String? userId,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -93,6 +97,8 @@ class BranchProvider extends ChangeNotifier {
         phone: phone,
         companyId: companyId,
         establishmentNumber: establishmentNumber,
+        updatedBy: userId,
+        updatedAt: DateTime.now(),
       );
 
       await _repository.updateBranch(updatedBranch);

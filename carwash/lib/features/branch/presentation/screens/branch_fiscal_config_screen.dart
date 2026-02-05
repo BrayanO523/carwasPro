@@ -219,7 +219,12 @@ class _BranchFiscalConfigScreenState extends State<BranchFiscalConfigScreen> {
 
       // 2. Update Fiscal Config
       if (!mounted) return;
-      await context.read<BillingProvider>().updateFiscalConfig(newConfig);
+      final userId = context.read<AuthProvider>().currentUser?.id;
+      if (userId == null) return;
+      await context.read<BillingProvider>().updateFiscalConfig(
+        newConfig,
+        userId,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

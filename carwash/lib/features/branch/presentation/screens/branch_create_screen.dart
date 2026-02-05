@@ -74,12 +74,14 @@ class _BranchCreateScreenState extends State<BranchCreateScreen> {
 
     try {
       final provider = context.read<BranchProvider>();
+      final currentUser = context.read<AuthProvider>().currentUser;
       final newBranch = await provider.addBranch(
         name: _nameController.text.trim(),
         address: _addressController.text.trim(),
         phone: _phoneController.text.trim(),
         companyId: companyId,
         establishmentNumber: _establishmentController.text.trim(),
+        userId: currentUser?.id,
       );
 
       if (mounted) {
@@ -131,7 +133,13 @@ class _BranchCreateScreenState extends State<BranchCreateScreen> {
                 active: true,
               );
 
-              await context.read<BillingProvider>().updateFiscalConfig(config);
+              if (currentUser?.id == null) {
+                throw Exception('User not logged in');
+              }
+              await context.read<BillingProvider>().updateFiscalConfig(
+                config,
+                currentUser!.id,
+              );
 
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
