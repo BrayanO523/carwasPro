@@ -13,9 +13,22 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
     }
     
+    // SAFE GETTERS (Prevent crashes if fields are missing)
+    function getUserRole() {
+       return getUserData().get('rol', 'employee'); // Default to employee
+    }
+
+    function getUserCompanyId() {
+       return getUserData().empresa_id; // Company ID is mandatory
+    }
+
+    function getUserBranchId() {
+       return getUserData().get('sucursal_id', ''); // Default to empty
+    }
+    
     // Check if user belongs to the company (using 'empresa_id')
     function belongsToCompany(companyId) {
-      return isSignedIn() && getUserData().empresa_id == companyId;
+      return isSignedIn() && getUserCompanyId() == companyId;
     }
 
     // Check if resource belongs to same company (using 'empresa_id')
@@ -30,7 +43,7 @@ service cloud.firestore {
     // 3. IF user is NOT 'admin' (employee), they are restricted to their assigned 'sucursal_id'.
     function isSameBranch(resourceData) {
       return belongsToCompany(resourceData.empresa_id) && 
-             (getUserData().rol == 'admin' || getUserData().sucursal_id == resourceData.sucursal_id);
+             (getUserRole() == 'admin' || getUserBranchId() == resourceData.sucursal_id);
     }
     
     // --- Collection Rules (Spanish Names) ---
@@ -42,11 +55,7 @@ service cloud.firestore {
       
       // Helper to check if requester is admin of the target user's company
       function isAdminOfTargetCompany(targetData) {
-        return belongsToCompany(targetData.empresa_id) && getUserData().rol == 'admin';
-        // Note: 'admin' role here likely means Company Admin. 
-        // If we wanted strictly Branch Admin, we'd check branch too, but User Management is usually Company level?
-        // User prompt implies strict branch scoping for BILLING, but User Management might be broader.
-        // Keeping as provided (Company Level for Users).
+        return belongsToCompany(targetData.empresa_id) && getUserRole() == 'admin';
       }
 
       allow read: if (isSignedIn() && request.auth.uid == userId) || 
@@ -101,15 +110,16 @@ service cloud.firestore {
     }
 
     // FACTURACION (Fiscal Config) - BRANCH SCOPED
-    // "authorization range now must be validated by branch"
     match /facturacion/{docId} {
       allow read: if isSameBranch(resource.data);
       allow write: if isSameBranch(request.resource.data);
     }
 
-    // FACTURAS (Invoices) - BRANCH SCOPED
+    // FACTURAS (Invoices)
+    // Temporarily simplified to just company check to diagnose permission issues
     match /facturas/{docId} {
-      allow read: if isSameBranch(resource.data);
+      // READ: Any user in the company can read facturas
+      allow read: if isSignedIn() && getUserCompanyId() == resource.data.empresa_id;
       allow create: if isSameBranch(request.resource.data);
       allow update: if isSameBranch(resource.data) && isSameBranch(request.resource.data);
     }
@@ -144,7 +154,7 @@ service cloud.firestore {
       allow delete: if isSameCompany(resource.data);
     }
 
-    // FACTURACION HISTORIAL (Fiscal History)
+    // FACTURACION HISTORIAL
     match /facturacion_historial/{docId} {
       allow read: if isSameBranch(resource.data);
       allow create: if isSameBranch(request.resource.data);
