@@ -6,6 +6,7 @@ import '../../domain/repositories/vehicle_entry_repository.dart';
 import '../../domain/entities/client.dart';
 import '../../domain/entities/credit_profile.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../core/constants/app_permissions.dart';
 
 class ClientFormScreen extends StatefulWidget {
   final Client? client;
@@ -33,6 +34,7 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
   late TextEditingController _creditNotesController;
 
   bool _isLoading = false;
+  bool _canManageCredit = false;
 
   @override
   void initState() {
@@ -52,6 +54,32 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
       text: c?.creditDays.toString() ?? '30',
     );
     _creditNotesController = TextEditingController(text: c?.creditNotes ?? '');
+
+    // Permission checks
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthProvider>();
+      final isNew = widget.client == null;
+      final requiredPermission = isNew
+          ? AppPermissions.createClient
+          : AppPermissions.editClient;
+
+      if (!auth.hasPermission(requiredPermission)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No tienes permiso para esta acción'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        Navigator.pop(context);
+        return;
+      }
+
+      setState(() {
+        _canManageCredit = auth.hasPermission(
+          AppPermissions.manageClientCredit,
+        );
+      });
+    });
   }
 
   Future<void> _save() async {
@@ -82,6 +110,9 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
             ? null
             : _addressController.text.trim(),
         companyId: user.companyId,
+        branchId:
+            widget.client?.branchId ??
+            user.branchId, // Preserve or assign from user
         // Audit fields
         createdBy: isNew ? user.id : widget.client?.createdBy,
         createdAt: isNew ? now : widget.client?.createdAt,
@@ -205,22 +236,26 @@ class _ClientFormScreenState extends State<ClientFormScreen> {
               ),
 
               const SizedBox(height: 32),
-              _buildSectionTitle('Gestión de Crédito'),
-              const SizedBox(height: 16),
 
-              SwitchListTile(
-                title: Text(
-                  'Habilitar Crédito',
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                ),
-                value: _creditEnabled,
-                onChanged: (val) => setState(() => _creditEnabled = val),
-                subtitle: const Text(
-                  'Permite facturar a crédito a este cliente',
-                ),
-              ),
+              // Credit Section - Only visible with permission
+              if (_canManageCredit) ...[
+                _buildSectionTitle('Gestión de Crédito'),
+                const SizedBox(height: 16),
 
-              if (_creditEnabled) ...[
+                SwitchListTile(
+                  title: Text(
+                    'Habilitar Crédito',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                  ),
+                  value: _creditEnabled,
+                  onChanged: (val) => setState(() => _creditEnabled = val),
+                  subtitle: const Text(
+                    'Permite facturar a crédito a este cliente',
+                  ),
+                ),
+              ],
+
+              if (_canManageCredit && _creditEnabled) ...[
                 const SizedBox(height: 16),
                 Row(
                   children: [
