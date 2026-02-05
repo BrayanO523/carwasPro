@@ -21,9 +21,17 @@ class _BillingListScreenState extends State<BillingListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final companyId = context.read<AuthProvider>().currentUser?.companyId;
+      final currentUser = context.read<AuthProvider>().currentUser;
+      final companyId = currentUser?.companyId;
       if (companyId != null) {
-        context.read<BillingProvider>().init(companyId);
+        context.read<BillingProvider>().init(
+          companyId,
+          branchId:
+              (currentUser?.branchId != null &&
+                  currentUser!.branchId!.isNotEmpty)
+              ? currentUser.branchId
+              : null,
+        );
       }
     });
 

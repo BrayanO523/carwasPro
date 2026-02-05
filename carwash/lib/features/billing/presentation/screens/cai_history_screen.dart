@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../domain/repositories/balance_repository.dart';
 import '../../domain/entities/fiscal_config.dart';
 import '../providers/billing_provider.dart';
+import 'cai_invoices_screen.dart';
 
 class CaiHistoryScreen extends StatefulWidget {
   final String companyId;
@@ -132,86 +133,100 @@ class _ActiveCaiCard extends StatelessWidget {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.green),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    config.cai ?? 'Sin CAI',
-                    style: GoogleFonts.robotoMono(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Vencimiento',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    Text(
-                      DateFormat('dd/MM/yyyy').format(deadline),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    if (daysLeft < 30)
-                      Text(
-                        '$daysLeft días restantes',
-                        style: TextStyle(
-                          color: daysLeft < 10 ? Colors.red : Colors.orange,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Secuencia',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    Text(
-                      '${config.currentSequence} / ${config.rangeMax}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Uso del Rango',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 4),
-            LinearProgressIndicator(
-              value: percent,
-              backgroundColor: Colors.grey[100],
-              valueColor: AlwaysStoppedAnimation(
-                percent > 0.9
-                    ? Colors.red
-                    : (percent > 0.7 ? Colors.orange : Colors.blue),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CaiInvoicesScreen(
+                companyId: config.companyId,
+                fiscalConfig: config,
               ),
-              minHeight: 8,
-              borderRadius: BorderRadius.circular(4),
             ),
-          ],
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      config.cai ?? 'Sin CAI',
+                      style: GoogleFonts.robotoMono(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Vencimiento',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      Text(
+                        DateFormat('dd/MM/yyyy').format(deadline),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      if (daysLeft < 30)
+                        Text(
+                          '$daysLeft días restantes',
+                          style: TextStyle(
+                            color: daysLeft < 10 ? Colors.red : Colors.orange,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Secuencia',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      Text(
+                        '${config.currentSequence} / ${config.rangeMax}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Uso del Rango',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 4),
+              LinearProgressIndicator(
+                value: percent,
+                backgroundColor: Colors.grey[100],
+                valueColor: AlwaysStoppedAnimation(
+                  percent > 0.9
+                      ? Colors.red
+                      : (percent > 0.7 ? Colors.orange : Colors.blue),
+                ),
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -233,6 +248,17 @@ class _HistoryCaiCard extends StatelessWidget {
       ),
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CaiInvoicesScreen(
+                companyId: config.companyId,
+                fiscalConfig: config,
+              ),
+            ),
+          );
+        },
         leading: const Icon(Icons.history, color: Colors.grey),
         title: Text(
           config.cai ?? 'N/A',

@@ -142,6 +142,14 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
             _client = client;
             _rtnController.text = client.rtn ?? '';
             _clientAddressController.text = client.address ?? '';
+
+            // Set Due Date from Credit Profile
+            if (client.creditEnabled) {
+              final days = client.creditProfile.days;
+              _dueDate = DateTime.now().add(
+                Duration(days: days > 0 ? days : 30),
+              );
+            }
           }
           _branch = branch;
           _company = company;
@@ -234,6 +242,10 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
                   _buildTotalsCard(),
                   const SizedBox(height: 16),
 
+                  // 7. Payment Condition Card
+                  _buildPaymentConditionCard(),
+                  const SizedBox(height: 16),
+
                   // Action Button
                   FilledButton.icon(
                     onPressed: _isProcessing ? null : _processAndSave,
@@ -274,6 +286,308 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
   }
 
   String _selectedDocType = 'invoice'; // Default
+  String _paymentCondition = 'contado';
+  DateTime _dueDate = DateTime.now().add(const Duration(days: 30));
+
+  Widget _buildPaymentConditionCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.payment, color: Colors.blueGrey),
+                const SizedBox(width: 8),
+                Text(
+                  'CONDICIÓN DE PAGO',
+                  style: GoogleFonts.notoSans(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.blueGrey[800],
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Contado'),
+                    leading: Radio<String>(
+                      value: 'contado',
+                      // ignore: deprecated_member_use
+                      groupValue: _paymentCondition,
+                      // ignore: deprecated_member_use
+                      onChanged: (val) =>
+                          setState(() => _paymentCondition = val!),
+                    ),
+                    onTap: () => setState(() => _paymentCondition = 'contado'),
+                  ),
+                ),
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Crédito'),
+                    leading: Radio<String>(
+                      value: 'credito',
+                      // ignore: deprecated_member_use
+                      groupValue: _paymentCondition,
+                      // ignore: deprecated_member_use
+                      onChanged: (val) {
+                        setState(() => _paymentCondition = val!);
+                        // Validar si cliente tiene crédito habilitado
+                        if (_client != null && !_client!.creditEnabled) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Este cliente no tiene crédito habilitado',
+                              ),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    onTap: () {
+                      setState(() => _paymentCondition = 'credito');
+                      if (_client != null && !_client!.creditEnabled) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Este cliente no tiene crédito habilitado',
+                            ),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            if (_paymentCondition == 'credito') ...[
+              const SizedBox(height: 12),
+              if (_client != null && !_client!.creditEnabled)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.warning_amber, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Este cliente no tiene crédito habilitado.',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _showEnableCreditDialog,
+                          icon: const Icon(Icons.edit_note),
+                          label: const Text('HABILITAR CRÉDITO AHORA'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.orange,
+                            side: const BorderSide(color: Colors.orange),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else ...[
+                InkWell(
+                  onTap: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _dueDate,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (date != null) {
+                      setState(() => _dueDate = date);
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Fecha de Vencimiento',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.calendar_month),
+                    ),
+                    child: Text(DateFormat('dd/MM/yyyy').format(_dueDate)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (_client != null) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Balance: L. ${_client!.currentBalance.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                      Text(
+                        'Límite: L. ${_client!.creditLimit.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showEnableCreditDialog() async {
+    final limitController = TextEditingController();
+    final daysController = TextEditingController(text: '30');
+    bool isLoading = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Habilitar Crédito Rápido'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Ingrese los datos para habilitar el crédito a este cliente inmediatamente.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: limitController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Límite de Crédito (L)',
+                    border: OutlineInputBorder(),
+                    prefixText: 'L. ',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: daysController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Días de Plazo',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isLoading
+                    ? null
+                    : () => Navigator.pop(context), // Cancel
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        final limit = double.tryParse(limitController.text);
+                        final days = int.tryParse(daysController.text);
+
+                        if (limit == null || limit <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Ingrese un límite válido'),
+                            ),
+                          );
+                          return;
+                        }
+
+                        setState(() => isLoading = true);
+
+                        try {
+                          final repo = context.read<VehicleEntryRepository>();
+                          final updatedProfile = _client!.creditProfile
+                              .copyWith(
+                                active: true,
+                                limit: limit,
+                                days: days ?? 30,
+                              );
+
+                          final updatedClient = _client!.copyWith(
+                            creditProfile: updatedProfile,
+                          );
+
+                          await repo.saveClient(updatedClient);
+
+                          if (mounted) {
+                            // ignore: use_build_context_synchronously
+                            Navigator.pop(context); // Close dialog
+                            this.setState(() {
+                              _client = updatedClient;
+                              _dueDate = DateTime.now().add(
+                                Duration(days: days ?? 30),
+                              );
+                            });
+                            // ignore: use_build_context_synchronously
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('¡Crédito Habilitado!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            setState(() => isLoading = false);
+                            // ignore: use_build_context_synchronously
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Error al guardar'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Guardar y Habilitar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   Widget _buildTextField(
     TextEditingController controller,
@@ -333,10 +647,10 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: const [
-                        Icon(Icons.receipt, color: Colors.orange),
+                        Icon(Icons.warning_amber_rounded, color: Colors.orange),
                         SizedBox(width: 8),
                         Text(
-                          'MODO RECIBO (NO FISCAL)',
+                          'MODO RECIBO: SUCURSAL SIN CAI',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Colors.orange,
@@ -929,7 +1243,30 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
 
       setState(() => _isProcessing = true);
 
+      // Save RTN and Address to client if they were entered and are different
+      final newRtn = _rtnController.text.trim();
+      final newAddress = _clientAddressController.text.trim();
+      final shouldUpdateClient =
+          (newRtn.isNotEmpty && newRtn != (_client!.rtn ?? '')) ||
+          (newAddress.isNotEmpty && newAddress != (_client!.address ?? ''));
+
+      if (shouldUpdateClient) {
+        final updatedClient = _client!.copyWith(
+          rtn: newRtn.isNotEmpty ? newRtn : _client!.rtn,
+          address: newAddress.isNotEmpty ? newAddress : _client!.address,
+          updatedBy: context.read<AuthProvider>().currentUser?.id,
+          updatedAt: DateTime.now(),
+        );
+
+        // Save to Firestore
+        await context.read<VehicleEntryRepository>().saveClient(updatedClient);
+
+        // Update local state
+        _client = updatedClient;
+      }
+
       // Delegate to Provider
+      if (!mounted) return;
       final invoice = await context.read<BillingProvider>().emitInvoice(
         vehicle: widget.vehicle,
         client: _client!,
@@ -939,22 +1276,27 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
         rtn: _rtnController.text,
         items: _invoiceItems,
         docType: _selectedDocType,
+        paymentCondition: _paymentCondition,
+        dueDate: _paymentCondition == 'credito' ? _dueDate : null,
       );
 
       // 5. Generate PDF
       // Note: Fiscal config might have been updated during emitInvoice, but we passed checks
       if (!context.mounted) return;
+      // ignore: use_build_context_synchronously
       final fiscalConfig = context.read<BillingProvider>().fiscalConfig;
 
       final pdfBytes = await PdfService.generateInvoicePdf(
         invoice: invoice,
         company: _company!,
         branch: _branch,
-        logoBytes: null, // TODO: Load Logo
-        fiscalConfig: fiscalConfig, // Pass full fiscal config
+        logoBytes: null, // Configurar logo posteriormente
+        fiscalConfig: fiscalConfig,
         client: _client,
         vehicle: widget.vehicle,
       );
+
+      if (!context.mounted) return;
 
       // 6. Print/Show/Share PDF
       final fileNamePrefix = _selectedDocType == 'invoice'
@@ -966,6 +1308,7 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
       );
 
       if (!context.mounted) return;
+      if (!context.mounted) return;
       // Share via WhatsApp/System
       await PdfService.sharePdf(
         pdfFile,
@@ -973,9 +1316,11 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
       );
 
       if (!context.mounted) return;
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Factura Emitida y Enviada')),
       );
+      // ignore: use_build_context_synchronously
       context.go('/home');
     } catch (e) {
       if (context.mounted) {

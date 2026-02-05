@@ -11,7 +11,10 @@ import 'package:carwash/features/entry/domain/entities/client.dart';
 import 'package:carwash/features/company/domain/entities/company.dart';
 import 'package:carwash/features/branch/domain/entities/branch.dart';
 import 'package:carwash/features/billing/domain/entities/invoice.dart';
+import 'package:carwash/features/billing/domain/entities/payment.dart';
 import 'package:carwash/features/billing/domain/entities/invoice_item.dart';
+import 'package:carwash/features/company/data/models/company_model.dart';
+import 'package:carwash/features/branch/data/models/branch_model.dart';
 import 'package:carwash/features/auth/domain/entities/user_entity.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -39,18 +42,23 @@ class BillingProvider extends ChangeNotifier {
 
   // Cache state
   String? _currentCompanyId;
+  String? _currentBranchId;
 
-  void init(String companyId, {bool force = false}) {
+  void init(String companyId, {String? branchId, bool force = false}) {
     // Cache check
-    if (!force && companyId == _currentCompanyId) return;
+    if (!force &&
+        companyId == _currentCompanyId &&
+        branchId == _currentBranchId)
+      return;
     _currentCompanyId = companyId;
+    _currentBranchId = branchId;
 
     _isLoading = true;
     notifyListeners();
 
     _vehiclesSubscription?.cancel();
     _vehiclesSubscription = _repository
-        .getVehiclesStream(companyId)
+        .getVehiclesStream(companyId, branchId: branchId)
         .listen(
           (vehicles) {
             _allVehicles = vehicles;
@@ -67,7 +75,7 @@ class BillingProvider extends ChangeNotifier {
 
   Future<void> refresh() async {
     if (_currentCompanyId != null) {
-      init(_currentCompanyId!, force: true);
+      init(_currentCompanyId!, branchId: _currentBranchId, force: true);
       await Future.delayed(const Duration(milliseconds: 500));
     }
   }
@@ -185,31 +193,21 @@ class BillingProvider extends ChangeNotifier {
 
   Future<void> loadProductsCatalog(String companyId, {String? branchId}) async {
     try {
-      final snapshot = await FirebaseFirestore.instance
+      Query query = FirebaseFirestore.instance
           .collection('productos')
           .where('empresa_id', isEqualTo: companyId)
-          .where('activo', isEqualTo: true)
-          .limit(100)
-          .get();
+          .where('activo', isEqualTo: true);
 
-      final allProducts = snapshot.docs.map((doc) {
-        final data = doc.data();
+      if (branchId != null && branchId.isNotEmpty) {
+        query = query.where('sucursal_ids', arrayContains: branchId);
+      }
+
+      final snapshot = await query.limit(100).get();
+
+      _productsCatalog = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return data;
-      }).toList();
-
-      // Filter by Branch
-      _productsCatalog = allProducts.where((product) {
-        final branchIds = List<String>.from(product['sucursal_ids'] ?? []);
-
-        if (branchIds.isEmpty) {
-          return true; // Available to all branches if empty? Or restricted? Usually empty means global.
-        }
-
-        if (branchId == null) {
-          return false; // If no branch selected, maybe don't show restricted products
-        }
-        return branchIds.contains(branchId);
       }).toList();
 
       notifyListeners();
@@ -291,7 +289,7 @@ class BillingProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateFiscalConfig(FiscalConfig config) async {
+  Future<void> updateFiscalConfig(FiscalConfig config, String userId) async {
     try {
       _isLoading = true;
       notifyListeners();
@@ -308,8 +306,37 @@ class BillingProvider extends ChangeNotifier {
         }
       }
 
-      await _balanceRepository.saveFiscalConfig(config);
-      _fiscalConfig = config;
+      // Recreate Config with Audit Fields
+      final isNew = config.id.isEmpty;
+      final configToSave = FiscalConfig(
+        id: config.id,
+        companyId: config.companyId,
+        branchId: config.branchId,
+        cai: config.cai,
+        rtn: config.rtn,
+        establishment: config.establishment,
+        emissionPoint: config.emissionPoint,
+        documentType: config.documentType,
+        rangeMin: config.rangeMin,
+        rangeMax: config.rangeMax,
+        currentSequence: config.currentSequence,
+        authorizationDate: config.authorizationDate,
+        deadline: config.deadline,
+        email: config.email,
+        phone: config.phone,
+        address: config.address,
+        active: config.active,
+        // Audit
+        createdBy: isNew ? userId : (config.createdBy ?? userId),
+        createdAt: isNew
+            ? DateTime.now()
+            : (config.createdAt ?? DateTime.now()),
+        updatedBy: userId,
+        updatedAt: DateTime.now(),
+      );
+
+      await _balanceRepository.saveFiscalConfig(configToSave);
+      _fiscalConfig = configToSave;
 
       _isLoading = false;
       notifyListeners();
@@ -321,23 +348,67 @@ class BillingProvider extends ChangeNotifier {
     }
   }
 
-  // Invoice Generation Logic
   Future<Invoice> emitInvoice({
     required Vehicle vehicle,
     required Client client,
     required Company company,
     required Branch? branch,
-    required UserEntity issuer, // Added issuer
+    required UserEntity issuer,
     required String rtn,
     required List<InvoiceItem> items,
     required String docType,
+    // Credit Args
+    required String paymentCondition, // 'contado', 'credito'
+    DateTime? dueDate,
   }) async {
     _isLoading = true;
     notifyListeners();
 
     try {
       // 1. Fiscal Validation
-      // 1. Fiscal Validation
+      // ... existing fiscal checks ...
+      if (docType == 'invoice') {
+        final config = _fiscalConfig;
+        if (config == null || (config.cai?.isEmpty ?? true)) {
+          throw Exception('Configuración Incompleta (CAI).');
+        }
+        // ... (keep short for brevity in replace, but must be careful not to delete existing logic if not matching exactly)
+        // actually I shouldn't replace the WHOLE method if I can avoid it to avoid losing fiscal checks.
+        // But the signature change requires replacing the head.
+        // And the body requires adding logic.
+      }
+
+      // Calculate Totals First for Validation
+      final subtotal = items.fold(0.0, (acc, item) => acc + item.total);
+      final isv15 = subtotal * 0.15;
+      final total = subtotal + isv15;
+
+      // Credit Validation
+      if (paymentCondition == 'credito') {
+        if (!client.creditEnabled) {
+          throw Exception('El cliente no tiene crédito habilitado.');
+        }
+        if (dueDate == null) {
+          throw Exception(
+            'Debe especificar fecha de vencimiento para crédito.',
+          );
+        }
+        if (client.creditLimit > 0) {
+          final newBalance = client.currentBalance + total;
+          if (newBalance > client.creditLimit) {
+            // For now throw, or we could require override param
+            throw Exception(
+              'Límite de crédito excedido. Balance: ${client.currentBalance} + Venta: $total = $newBalance > Límite: ${client.creditLimit}',
+            );
+          }
+        }
+      }
+
+      // ... Proceed to generate number ... (I need to be careful with replace chunks)
+
+      // I will target the method signature and the START of the method.
+      // Then I will target the Invoice creation part.
+
       if (docType == 'invoice') {
         final config = _fiscalConfig;
         if (config == null ||
@@ -421,13 +492,11 @@ class BillingProvider extends ChangeNotifier {
           active: true,
         );
 
-        await updateFiscalConfig(updatedConfig);
+        await updateFiscalConfig(updatedConfig, issuer.id);
       }
 
       // 3. Create Entity
-      final subtotal = items.fold(0.0, (acc, item) => acc + item.total);
-      final isv15 = subtotal * 0.15;
-      final total = subtotal + isv15;
+      // Variables already calculated above for validation
 
       final invoice = Invoice(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -454,6 +523,13 @@ class BillingProvider extends ChangeNotifier {
         rangeMin: _fiscalConfig?.rangeMin,
         rangeMax: _fiscalConfig?.rangeMax,
         sequenceNumber: sequenceNumber,
+        // Credit/Payment Fields
+        paymentCondition: paymentCondition,
+        paymentStatus: paymentCondition == 'credito' ? 'pendiente' : 'pagado',
+        dueDate: paymentCondition == 'credito' ? dueDate : null,
+        paidAmount: paymentCondition == 'credito' ? 0.0 : total,
+        paidAt: paymentCondition == 'contado' ? DateTime.now() : null,
+        createdBy: issuer.id,
       );
 
       // 4. Save Invoice
@@ -462,6 +538,16 @@ class BillingProvider extends ChangeNotifier {
       // 5. Update Vehicle Status
       await markAsFinished(vehicle.id);
 
+      // 6. Update Client Balance (Credit only)
+      if (paymentCondition == 'credito') {
+        final newBalance = client.currentBalance + total;
+        await _repository.updateClientBalance(
+          client.id,
+          newBalance,
+          userId: issuer.id,
+        );
+      }
+
       _isLoading = false;
       notifyListeners();
       return invoice;
@@ -469,6 +555,290 @@ class BillingProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
+    }
+  }
+
+  Future<List<Payment>> getPaymentsByInvoice(
+    String invoiceId,
+    String companyId,
+  ) async {
+    return _balanceRepository.getPaymentsByInvoice(invoiceId, companyId);
+  }
+
+  Future<List<Payment>> getPaymentsByClient(
+    String clientId,
+    String companyId,
+  ) async {
+    return _balanceRepository.getPaymentsByClient(clientId, companyId);
+  }
+
+  // Accounts Receivable Logic
+  Future<List<Invoice>> getReceivables(String companyId) async {
+    try {
+      return await _balanceRepository.getReceivables(companyId);
+    } catch (e) {
+      log('Error loading receivables: $e');
+      rethrow;
+    }
+  }
+
+  Future<Invoice?> getInvoiceById(String invoiceId) async {
+    try {
+      return await _balanceRepository.getInvoiceById(invoiceId);
+    } catch (e) {
+      log('Error loading invoice: $e');
+      return null;
+    }
+  }
+
+  Future<List<Invoice>> getInvoicesByCai(String companyId, String cai) async {
+    try {
+      final result = await _balanceRepository.getInvoices(
+        companyId,
+        cai: cai,
+        limit: 100, // Fetch up to 100 for history view
+      );
+      return result.items;
+    } catch (e) {
+      log('Error loading invoices by CAI: $e');
+      return [];
+    }
+  }
+
+  Future<List<Payment>> getInvoicePayments(String invoiceId) async {
+    try {
+      if (_currentCompanyId == null) {
+        throw Exception('Company ID not initialized');
+      }
+      return await _balanceRepository.getPaymentsByInvoice(
+        invoiceId,
+        _currentCompanyId!,
+      );
+    } catch (e) {
+      log('Error loading payments: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> registerPayment({
+    required Invoice invoice,
+    required double amount,
+    required String paymentMethod,
+    String? reference,
+    String? notes,
+    required UserEntity user,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final payment = Payment(
+        id: DateTime.now().millisecondsSinceEpoch
+            .toString(), // Simple ID or UUID
+        invoiceId: invoice.id,
+        clientId: invoice.clientId,
+        companyId: invoice.companyId,
+        amount: amount,
+        paymentMethod: paymentMethod,
+        reference: reference,
+        notes: notes,
+        createdAt: DateTime.now(),
+        createdBy: user.id,
+      );
+
+      // 1. Save Payment
+      await _balanceRepository.savePayment(payment);
+
+      // 2. Update Invoice Status
+      final newPaidAmount = invoice.paidAmount + amount;
+      final newStatus = (newPaidAmount >= invoice.totalAmount - 0.01)
+          ? 'pagado'
+          : 'parcial';
+
+      await _balanceRepository.updateInvoicePaymentStatus(
+        invoiceId: invoice.id,
+        status: newStatus,
+        paidAmount: newPaidAmount,
+        paidAt: DateTime.now(),
+        userId: user.id,
+      );
+
+      // 3. Update Client Balance
+      final client = await _repository.getClientById(invoice.clientId);
+      if (client != null) {
+        final currentBalance = client.currentBalance;
+        final newBalance = currentBalance - amount;
+        await _repository.updateClientBalance(
+          client.id,
+          newBalance < 0 ? 0 : newBalance,
+          userId: user.id,
+        );
+      }
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> registerGlobalPayment({
+    required String clientId,
+    required String companyId,
+    required double amount,
+    required String paymentMethod,
+    String? reference,
+    String? notes,
+    required UserEntity user,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // 1. Get Pending Invoices Sorted by Date (FIFO)
+      List<Invoice> pendingInvoices = await getPendingInvoicesByClient(
+        clientId,
+        companyId,
+      );
+      // Sort by DueDate Ascending (Oldest first). Nulls (no due date) treated as far future?
+      // Or treating nulls as "immediate"? Let's treat nulls as "Oldest" (bottom of pile? or top?)
+      // Usually older invoices have dates. Let's say nulls go last.
+      pendingInvoices.sort((a, b) {
+        if (a.dueDate == null) return 1;
+        if (b.dueDate == null) return -1;
+        return a.dueDate!.compareTo(b.dueDate!);
+      });
+
+      double remainingPayment = amount;
+      double totalPaid = 0;
+
+      // 2. Iterate and Pay
+      for (var invoice in pendingInvoices) {
+        if (remainingPayment <= 0.01) break;
+
+        final pendingBalance = invoice.totalAmount - invoice.paidAmount;
+        if (pendingBalance <= 0) continue;
+
+        // Amount to pay for this invoice
+        double payAmount = (remainingPayment >= pendingBalance)
+            ? pendingBalance
+            : remainingPayment;
+
+        // Create Payment Record
+        final payment = Payment(
+          id: '${DateTime.now().millisecondsSinceEpoch}_${invoice.invoiceNumber}',
+          invoiceId: invoice.id,
+          clientId: invoice.clientId,
+          companyId: invoice.companyId,
+          amount: payAmount,
+          paymentMethod: paymentMethod,
+          reference: reference,
+          notes: 'Abono Global: ${notes ?? ''}',
+          createdAt: DateTime.now(),
+          createdBy: user.id,
+        );
+
+        await _balanceRepository.savePayment(payment);
+
+        // Update Invoice Status
+        final newPaidAmount = invoice.paidAmount + payAmount;
+        final newStatus = (newPaidAmount >= invoice.totalAmount - 0.01)
+            ? 'pagado'
+            : 'parcial';
+
+        await _balanceRepository.updateInvoicePaymentStatus(
+          invoiceId: invoice.id,
+          status: newStatus,
+          paidAmount: newPaidAmount,
+          paidAt: DateTime.now(),
+          userId: user.id,
+        );
+
+        remainingPayment -= payAmount;
+        totalPaid += payAmount;
+      }
+
+      // 3. Update Client Balance (Once)
+      if (totalPaid > 0) {
+        final client = await _repository.getClientById(clientId);
+        if (client != null) {
+          final currentBalance = client.currentBalance;
+          final newBalance = currentBalance - totalPaid;
+          await _repository.updateClientBalance(
+            client.id,
+            newBalance < 0 ? 0 : newBalance,
+            userId: user.id,
+          );
+        }
+      }
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  // Client Credit Management
+  Future<List<Invoice>> getPendingInvoicesByClient(
+    String clientId,
+    String companyId,
+  ) async {
+    try {
+      final snapshot = await _balanceRepository.getInvoices(
+        companyId,
+        clientId: clientId,
+        limit: 100, // Reasonable limit
+      );
+
+      return snapshot.items
+          .where(
+            (inv) =>
+                inv.paymentCondition == 'credito' &&
+                (inv.paymentStatus == 'pendiente' ||
+                    inv.paymentStatus == 'parcial'),
+          )
+          .toList();
+    } catch (e) {
+      log('Error loading client pending invoices: $e');
+      return [];
+    }
+  }
+
+  // Helpers for PDF Generation
+  Future<Company?> getCompanyById(String companyId) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('empresas')
+          .doc(companyId)
+          .get();
+      if (doc.exists) {
+        return CompanyModel.fromFirestore(doc);
+      }
+      return null;
+    } catch (e) {
+      log('Error getting company: $e');
+      return null;
+    }
+  }
+
+  Future<Branch?> getBranchById(String branchId) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('sucursales')
+          .doc(branchId)
+          .get();
+      if (doc.exists) {
+        return BranchModel.fromFirestore(doc);
+      }
+      return null;
+    } catch (e) {
+      log('Error getting branch: $e');
+      return null;
     }
   }
 

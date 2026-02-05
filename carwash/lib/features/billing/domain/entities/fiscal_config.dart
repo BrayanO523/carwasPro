@@ -35,5 +35,14 @@ class FiscalConfig {
     required this.phone,
     required this.address,
     this.active = true,
+    this.createdBy,
+    this.createdAt,
+    this.updatedBy,
+    this.updatedAt,
   });
+
+  final String? createdBy;
+  final DateTime? createdAt;
+  final String? updatedBy;
+  final DateTime? updatedAt;
 }

@@ -20,6 +20,10 @@ class FiscalConfigModel extends FiscalConfig {
     required super.phone,
     required super.address,
     super.active,
+    super.createdBy,
+    super.createdAt,
+    super.updatedBy,
+    super.updatedAt,
   });
 
   factory FiscalConfigModel.fromFirestore(DocumentSnapshot doc) {
@@ -42,6 +46,10 @@ class FiscalConfigModel extends FiscalConfig {
       phone: data['telefono'] ?? '',
       address: data['direccion'] ?? '',
       active: data['activo'] ?? true,
+      createdBy: data['createdBy'],
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      updatedBy: data['updatedBy'],
+      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -65,6 +73,10 @@ class FiscalConfigModel extends FiscalConfig {
       'telefono': phone,
       'direccion': address,
       'activo': active,
+      'createdBy': createdBy,
+      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
+      'updatedBy': updatedBy,
+      'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
     };
   }
 }

@@ -16,4 +16,25 @@ class InvoiceItem {
 
   // Compatibility getter for existing code
   double get price => total;
+
+  Map<String, dynamic> toMap() {
+    return {
+      'description': description,
+      'quantity': quantity,
+      'unitPrice': unitPrice,
+      'discount': discount,
+      'total': total,
+      'taxType': taxType,
+    };
+  }
+
+  factory InvoiceItem.fromMap(Map<String, dynamic> map) {
+    return InvoiceItem(
+      description: map['description'] ?? '',
+      quantity: (map['quantity'] ?? 1.0).toDouble(),
+      unitPrice: (map['unitPrice'] ?? 0.0).toDouble(),
+      discount: (map['discount'] ?? 0.0).toDouble(),
+      taxType: map['taxType'] ?? '15',
+    );
+  }
 }

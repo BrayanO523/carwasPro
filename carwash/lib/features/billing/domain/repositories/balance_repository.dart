@@ -3,6 +3,7 @@ import '../entities/invoice.dart';
 import '../../data/models/invoice_model.dart';
 import '../../data/models/fiscal_config_model.dart';
 import '../entities/fiscal_config.dart';
+import '../entities/payment.dart';
 
 abstract class BalanceRepository {
   Future<void> saveInvoice(Invoice invoice);
@@ -12,6 +13,8 @@ abstract class BalanceRepository {
     DateTime? endDate,
     String? documentType,
     String? branchId,
+    String? cai,
+    String? clientId, // Added
     int limit = 20,
     DocumentSnapshot? startAfter,
   });
@@ -27,6 +30,23 @@ abstract class BalanceRepository {
     String companyId,
     String branchId,
   );
+
+  // Credit Methods
+  Future<List<Invoice>> getReceivables(String companyId);
+  Future<void> updateInvoicePaymentStatus({
+    required String invoiceId,
+    required String status,
+    required double paidAmount,
+    required DateTime? paidAt,
+    String? userId,
+  });
+  Future<void> savePayment(Payment payment);
+  Future<List<Payment>> getPaymentsByInvoice(
+    String invoiceId,
+    String companyId,
+  );
+  Future<List<Payment>> getPaymentsByClient(String clientId, String companyId);
+  Future<Invoice?> getInvoiceById(String invoiceId);
 }
 
 class PaginatedInvoices {
@@ -71,11 +91,104 @@ class BalanceRepositoryImpl implements BalanceRepository {
             caiDeadline: invoice.caiDeadline,
             rangeMin: invoice.rangeMin,
             rangeMax: invoice.rangeMax,
+            sequenceNumber: invoice.sequenceNumber, // CRITICAL: Was missing!
+            // Credit Fields Mapping
+            paymentCondition: invoice.paymentCondition,
+            paymentStatus: invoice.paymentStatus,
+            dueDate: invoice.dueDate,
+            paidAmount: invoice.paidAmount,
+            paidAt: invoice.paidAt,
+            createdBy: invoice.createdBy,
+            updatedBy: invoice.updatedBy,
+            updatedAt: invoice.updatedAt,
           );
 
     await _firestore.collection('facturas').doc(invoice.id).set(model.toMap());
   }
 
+  @override
+  Future<List<Invoice>> getReceivables(String companyId) async {
+    final snapshot = await _firestore
+        .collection('facturas')
+        .where('empresa_id', isEqualTo: companyId)
+        .where('condicion_pago', isEqualTo: 'credito')
+        .where('estado_pago', whereIn: ['pendiente', 'parcial', 'vencido'])
+        .orderBy('fecha_creacion', descending: true)
+        .get();
+
+    return snapshot.docs.map((doc) => InvoiceModel.fromFirestore(doc)).toList();
+  }
+
+  @override
+  Future<void> updateInvoicePaymentStatus({
+    required String invoiceId,
+    required String status,
+    required double paidAmount,
+    required DateTime? paidAt,
+    String? userId,
+  }) async {
+    final updates = <String, dynamic>{
+      'estado_pago': status,
+      'monto_pagado': paidAmount,
+      'updatedBy': userId,
+      'updatedAt': Timestamp.now(),
+    };
+    if (paidAt != null) {
+      updates['fecha_pagado'] = Timestamp.fromDate(paidAt);
+    }
+
+    await _firestore.collection('facturas').doc(invoiceId).update(updates);
+  }
+
+  @override
+  Future<void> savePayment(Payment payment) async {
+    await _firestore.collection('pagos').doc(payment.id).set(payment.toMap());
+  }
+
+  @override
+  Future<List<Payment>> getPaymentsByInvoice(
+    String invoiceId,
+    String companyId,
+  ) async {
+    final snapshot = await _firestore
+        .collection('pagos')
+        .where('empresa_id', isEqualTo: companyId)
+        .where('factura_id', isEqualTo: invoiceId)
+        .orderBy('fecha_creacion', descending: true)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => Payment.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
+  @override
+  Future<List<Payment>> getPaymentsByClient(
+    String clientId,
+    String companyId,
+  ) async {
+    final snapshot = await _firestore
+        .collection('pagos')
+        .where('empresa_id', isEqualTo: companyId)
+        .where('cliente_id', isEqualTo: clientId)
+        .orderBy('fecha_creacion', descending: true)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => Payment.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
+  @override
+  Future<Invoice?> getInvoiceById(String invoiceId) async {
+    final doc = await _firestore.collection('facturas').doc(invoiceId).get();
+    if (doc.exists) {
+      return InvoiceModel.fromFirestore(doc);
+    }
+    return null;
+  }
+
+  // Fiscal Config implementations...
   @override
   Future<PaginatedInvoices> getInvoices(
     String companyId, {
@@ -83,6 +196,8 @@ class BalanceRepositoryImpl implements BalanceRepository {
     DateTime? endDate,
     String? documentType,
     String? branchId,
+    String? cai,
+    String? clientId,
     int limit = 20,
     DocumentSnapshot? startAfter,
   }) async {
@@ -90,12 +205,20 @@ class BalanceRepositoryImpl implements BalanceRepository {
         .collection('facturas')
         .where('empresa_id', isEqualTo: companyId);
 
+    if (clientId != null && clientId.isNotEmpty) {
+      query = query.where('cliente_id', isEqualTo: clientId);
+    }
+
     if (documentType != null && documentType.isNotEmpty) {
       query = query.where('tipo_documento', isEqualTo: documentType);
     }
 
     if (branchId != null && branchId.isNotEmpty) {
       query = query.where('sucursal_id', isEqualTo: branchId);
+    }
+
+    if (cai != null && cai.isNotEmpty) {
+      query = query.where('cai', isEqualTo: cai);
     }
 
     query = query.orderBy('fecha_creacion', descending: true);
@@ -202,6 +325,10 @@ class BalanceRepositoryImpl implements BalanceRepository {
             phone: config.phone,
             address: config.address,
             active: config.active,
+            createdBy: config.createdBy,
+            createdAt: config.createdAt,
+            updatedBy: config.updatedBy,
+            updatedAt: config.updatedAt,
           );
 
     if (config.id.isEmpty) {
