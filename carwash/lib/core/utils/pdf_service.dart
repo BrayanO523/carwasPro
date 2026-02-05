@@ -143,7 +143,7 @@ class PdfService {
                           pw.Text('CLIENTE: ${invoice.clientName}'),
                           if (isInvoice)
                             pw.Text(
-                              'RTN: ${invoice.clientRtn ?? "Consumidor Final"}',
+                              'RTN: ${invoice.clientRtn.isNotEmpty ? invoice.clientRtn : "Consumidor Final"}',
                             ),
                           if (isInvoice &&
                               client != null &&
@@ -167,6 +167,35 @@ class PdfService {
                   ],
                 ),
               ),
+
+              pw.SizedBox(height: 10),
+
+              // Payment Info Row
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'CONDICIÓN DE PAGO: ${invoice.paymentCondition.toUpperCase()}',
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                  ),
+                  if (invoice.paymentCondition == 'credito' &&
+                      invoice.dueDate != null)
+                    pw.Text(
+                      'VENCIMIENTO: ${DateFormat('dd/MM/yyyy').format(invoice.dueDate!)}',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 10,
+                        color: PdfColors.red,
+                      ),
+                    ),
+                ],
+              ),
+              pw.Divider(),
+
+              pw.SizedBox(height: 10),
 
               pw.SizedBox(height: 20),
 
@@ -391,6 +420,213 @@ class PdfService {
   static Future<void> sharePdf(File file, String text) async {
     await SharePlus.instance.share(
       ShareParams(files: [XFile(file.path)], text: text),
+    );
+  }
+
+  static Future<Uint8List> generateAccountStatement({
+    required Company company,
+    required Client client,
+    required List<Invoice> invoices,
+    required double totalDebt,
+    Uint8List? logoBytes,
+  }) async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      if (logoBytes != null)
+                        pw.Image(
+                          pw.MemoryImage(logoBytes),
+                          width: 80,
+                          height: 80,
+                        ),
+                      pw.Text(
+                        company.name.toUpperCase(),
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      pw.Text('RTN: ${company.rtn}'),
+                      pw.Text('Tel: ${company.phone}'),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        'ESTADO DE CUENTA',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 20,
+                          color: PdfColors.blueGrey800,
+                        ),
+                      ),
+                      pw.Text('Fecha: ${DateFormat('dd/MM/yyyy').format(now)}'),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Client Info
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(4),
+                  ),
+                ),
+                width: double.infinity,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'CLIENTE: ${client.fullName.toUpperCase()}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                    if (client.rtn != null && client.rtn!.isNotEmpty)
+                      pw.Text('RTN: ${client.rtn}'),
+                    if (client.phone.isNotEmpty)
+                      pw.Text('Tel: ${client.phone}'),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+
+              // Invoices Table
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                children: [
+                  // Table Header
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.blueGrey50,
+                    ),
+                    children: [
+                      _buildHeaderCell('Fecha'),
+                      _buildHeaderCell('Factura #'),
+                      _buildHeaderCell('Vencimiento'),
+                      _buildHeaderCell('Total', align: pw.TextAlign.right),
+                      _buildHeaderCell('Saldo', align: pw.TextAlign.right),
+                    ],
+                  ),
+                  // Table Rows
+                  ...invoices.map((invoice) {
+                    final pending = invoice.totalAmount - invoice.paidAmount;
+                    final isOverdue =
+                        invoice.dueDate != null &&
+                        now.isAfter(invoice.dueDate!) &&
+                        pending > 0;
+
+                    return pw.TableRow(
+                      children: [
+                        _buildCell(
+                          DateFormat('dd/MM/yyyy').format(invoice.createdAt),
+                        ),
+                        _buildCell(invoice.invoiceNumber),
+                        _buildCell(
+                          invoice.dueDate != null
+                              ? DateFormat(
+                                  'dd/MM/yyyy',
+                                ).format(invoice.dueDate!)
+                              : '-',
+                          color: isOverdue ? PdfColors.red : PdfColors.black,
+                        ),
+                        _buildCell(
+                          'L. ${invoice.totalAmount.toStringAsFixed(2)}',
+                          align: pw.TextAlign.right,
+                        ),
+                        _buildCell(
+                          'L. ${pending.toStringAsFixed(2)}',
+                          align: pw.TextAlign.right,
+                          isBold: true,
+                        ),
+                      ],
+                    );
+                  }),
+                ],
+              ),
+
+              pw.SizedBox(height: 20),
+              pw.Divider(),
+
+              // Grand Total
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    'TOTAL PENDIENTE:',
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  pw.SizedBox(width: 20),
+                  pw.Text(
+                    'L. ${totalDebt.toStringAsFixed(2)}',
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 18,
+                      color: PdfColors.red,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  static pw.Widget _buildHeaderCell(
+    String text, {
+    pw.TextAlign align = pw.TextAlign.left,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+      ),
+    );
+  }
+
+  static pw.Widget _buildCell(
+    String text, {
+    pw.TextAlign align = pw.TextAlign.left,
+    bool isBold = false,
+    PdfColor color = PdfColors.black,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(6),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: color,
+        ),
+      ),
     );
   }
 }

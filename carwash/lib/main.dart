@@ -8,7 +8,9 @@ import 'package:carwash/features/billing/presentation/providers/billing_provider
 import 'package:carwash/features/billing/presentation/screens/billing_list_screen.dart';
 import 'package:carwash/features/billing/presentation/screens/billing_process_screen.dart';
 import 'package:carwash/features/billing/presentation/screens/balance_screen.dart';
+import 'package:carwash/features/billing/presentation/screens/accounts_receivable_screen.dart'; // NEW
 import 'package:carwash/features/company/presentation/screens/company_config_screen.dart';
+import 'package:carwash/features/entry/presentation/screens/client_list_screen.dart'; // NEW
 import 'package:flutter/material.dart';
 import 'package:carwash/features/entry/domain/entities/vehicle.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -59,9 +61,17 @@ import 'features/products/presentation/providers/product_provider.dart';
 import 'features/products/presentation/screens/product_form_screen.dart';
 import 'features/products/domain/entities/product.dart';
 
+import 'features/audit/data/repositories/audit_repository_impl.dart';
+import 'features/audit/domain/repositories/audit_repository.dart';
+
+import 'package:intl/date_symbol_data_local.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Initialize standard date formatting for Spanish
+  await initializeDateFormatting('es', null);
+
   // Seeding is now handled by legacy migration or admin tools, not on every app start.
   // await WashTypesSeeder.seed();
   runApp(const MyApp());
@@ -73,10 +83,15 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 1. Create Repository Instances
-    final authRepository = AuthRepositoryImpl();
+    final auditRepository = AuditRepositoryImpl();
+    final authRepository = AuthRepositoryImpl(auditRepository: auditRepository);
     final companyRepository = CompanyRepositoryImpl();
-    final vehicleEntryRepository = VehicleEntryRepositoryImpl();
-    final branchRepository = BranchRepositoryImpl();
+    final vehicleEntryRepository = VehicleEntryRepositoryImpl(
+      auditRepository: auditRepository,
+    );
+    final branchRepository = BranchRepositoryImpl(
+      auditRepository: auditRepository,
+    );
     final washTypeRepository = WashTypeRepositoryImpl();
     final productRepository = ProductRepositoryImpl();
 
@@ -88,6 +103,7 @@ class MyApp extends StatelessWidget {
         Provider<VehicleEntryRepository>.value(value: vehicleEntryRepository),
         Provider<BranchRepository>.value(value: branchRepository),
         Provider<WashTypeRepository>.value(value: washTypeRepository),
+        Provider<AuditRepository>.value(value: auditRepository),
 
         // Inject ViewModels/Providers
         ChangeNotifierProvider(
@@ -109,6 +125,7 @@ class MyApp extends StatelessWidget {
           create: (_) => VehicleEntryProvider(
             repository: vehicleEntryRepository,
             washTypeRepository: washTypeRepository,
+            branchRepository: branchRepository,
           ),
         ),
         ChangeNotifierProvider(
@@ -147,7 +164,17 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => ProductProvider(repository: productRepository),
         ),
-        ChangeNotifierProvider(create: (_) => DataInspectorProvider()),
+        ChangeNotifierProvider(
+          create: (_) => DataInspectorProvider(
+            companyRepository: companyRepository,
+            branchRepository: branchRepository,
+            authRepository: authRepository,
+            vehicleRepository: vehicleEntryRepository,
+            washTypeRepository: washTypeRepository,
+            productRepository: productRepository,
+            auditRepository: auditRepository,
+          ),
+        ),
       ],
       child: const AppContent(),
     );
@@ -261,6 +288,14 @@ class AppContent extends StatelessWidget {
         GoRoute(
           path: '/data-inspector',
           builder: (context, state) => const DataInspectorScreen(),
+        ),
+        GoRoute(
+          path: '/client-list',
+          builder: (context, state) => const ClientListScreen(),
+        ),
+        GoRoute(
+          path: '/accounts-receivable',
+          builder: (context, state) => const AccountsReceivableScreen(),
         ),
       ],
     );
