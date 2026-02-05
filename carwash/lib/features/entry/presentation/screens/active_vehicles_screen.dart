@@ -173,7 +173,6 @@ class _VehicleCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () {
-          // TODO: Show details dialog with images
           _showVehicleDetails(context, vehicle);
         },
         borderRadius: BorderRadius.circular(16),
@@ -274,11 +273,16 @@ class _VehicleCard extends StatelessWidget {
                                           .read<AuthProvider>()
                                           .companyName ??
                                       'CarWash';
+                                  final currentUser = context
+                                      .read<AuthProvider>()
+                                      .currentUser;
                                   await context
                                       .read<ActiveVehiclesProvider>()
                                       .completeWashAndNotify(
                                         vehicle: vehicle,
                                         companyName: companyName,
+                                        userId: currentUser?.id,
+                                        userEmail: currentUser?.email,
                                       );
 
                                   if (context.mounted) {

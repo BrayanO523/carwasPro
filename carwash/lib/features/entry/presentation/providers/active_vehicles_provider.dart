@@ -113,9 +113,18 @@ class ActiveVehiclesProvider extends ChangeNotifier {
     }).toList();
   }
 
-  Future<void> markAsWashed(String vehicleId) async {
+  Future<void> markAsWashed(
+    String vehicleId, {
+    String? userId,
+    String? userEmail,
+  }) async {
     try {
-      await _repository.updateVehicleStatus(vehicleId, Vehicle.statusWashed);
+      await _repository.updateVehicleStatus(
+        vehicleId,
+        Vehicle.statusWashed,
+        userId: userId,
+        userEmail: userEmail,
+      );
     } catch (e) {
       log('Error marking vehicle as washed: $e');
       rethrow;
@@ -125,10 +134,12 @@ class ActiveVehiclesProvider extends ChangeNotifier {
   Future<void> completeWashAndNotify({
     required Vehicle vehicle,
     required String companyName,
+    String? userId,
+    String? userEmail,
   }) async {
     try {
       // 1. Mark as Washed
-      await markAsWashed(vehicle.id);
+      await markAsWashed(vehicle.id, userId: userId, userEmail: userEmail);
 
       // 2. Fetch Client Info
       final client = await _repository.getClientById(vehicle.clientId);

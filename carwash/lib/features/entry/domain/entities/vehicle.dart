@@ -32,9 +32,13 @@ class Vehicle {
     'otro',
   ];
 
+  final String? createdBy;
+  final DateTime? createdAt;
+  final String? updatedBy;
+  final DateTime? updatedAt;
+
   Vehicle({
     required this.id,
-    // required this.model, // Removed
     required this.clientId,
     required this.companyId,
     required this.entryDate,
@@ -47,5 +51,9 @@ class Vehicle {
     this.branchId,
     this.vehicleType,
     this.services = const [],
+    this.createdBy,
+    this.createdAt,
+    this.updatedBy,
+    this.updatedAt,
   });
 }

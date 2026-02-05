@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../presentation/providers/vehicle_entry_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../domain/entities/client.dart'; // Added Import
 
 class VehicleEntryScreen extends StatefulWidget {
   const VehicleEntryScreen({super.key});
@@ -15,6 +18,13 @@ class VehicleEntryScreen extends StatefulWidget {
 
 class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
   int _currentStep = 0;
+  final FocusNode _nameFocusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _nameFocusNode.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -25,9 +35,16 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
       final authProvider = context.read<AuthProvider>();
       final currentUser = authProvider.currentUser;
       if (currentUser?.companyId != null) {
+        if (currentUser!.role == 'admin') {
+          provider.loadBranches(currentUser.companyId);
+        }
         provider.subscribeToWashTypes(
-          currentUser!.companyId,
+          currentUser.companyId,
           currentUser.branchId ?? '',
+        );
+        provider.subscribeToClients(
+          currentUser.companyId,
+          currentUser.branchId,
         );
       }
     });
@@ -92,13 +109,89 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
             : null,
         content: Column(
           children: [
-            TextField(
-              controller: providerRead.nameController,
-              decoration: const InputDecoration(
-                labelText: 'Nombre Completo *',
-                prefixIcon: Icon(Icons.person_outline),
-                border: OutlineInputBorder(),
-              ),
+            // Branch selection removed per user request (Auto-assigned)
+            RawAutocomplete<Client>(
+              textEditingController: providerRead.nameController,
+              focusNode: _nameFocusNode,
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                if (textEditingValue.text.isEmpty) {
+                  return const Iterable<Client>.empty();
+                }
+                // Use local synchronous search for instant results
+                return providerWatch.searchClientsLocal(textEditingValue.text);
+              },
+              onSelected: (Client client) {
+                providerRead.fillClientData(client);
+                _nameFocusNode.unfocus();
+              },
+              displayStringForOption: (Client client) => client.fullName,
+              fieldViewBuilder:
+                  (
+                    BuildContext context,
+                    TextEditingController textEditingController,
+                    FocusNode focusNode,
+                    VoidCallback onFieldSubmitted,
+                  ) {
+                    return TextField(
+                      controller: textEditingController,
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre Completo *',
+                        prefixIcon: Icon(Icons.person_outline),
+                        border: OutlineInputBorder(),
+                        suffixIcon: Icon(Icons.search, color: Colors.grey),
+                      ),
+                      onSubmitted: (_) => onFieldSubmitted(),
+                    );
+                  },
+              optionsViewBuilder:
+                  (
+                    BuildContext context,
+                    AutocompleteOnSelected<Client> onSelected,
+                    Iterable<Client> options,
+                  ) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            bottom: Radius.circular(12),
+                          ),
+                        ),
+                        color: Colors.white,
+                        child: Container(
+                          width:
+                              MediaQuery.of(context).size.width -
+                              80, // Approx width relative to screen padding
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final Client option = options.elementAt(index);
+                              return ListTile(
+                                title: Text(
+                                  option.fullName,
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  option.phone,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                onTap: () => onSelected(option),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
             ),
             const SizedBox(height: 16),
             TextField(
@@ -241,7 +334,19 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                       ? theme.primaryColor.withValues(alpha: 0.05)
                       : Colors.white,
                 ),
-                child: RadioListTile<String>(
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  leading: Radio<String>(
+                    value: service.id,
+                    // ignore: deprecated_member_use
+                    groupValue: providerWatch.selectedBaseServiceId,
+                    // ignore: deprecated_member_use
+                    onChanged: (value) => providerRead.setBaseService(value!),
+                    activeColor: theme.primaryColor,
+                  ),
                   title: Text(
                     service.name,
                     style: GoogleFonts.outfit(fontWeight: FontWeight.w500),
@@ -252,13 +357,7 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                           'L. ${price.toStringAsFixed(2)}',
                           style: GoogleFonts.outfit(),
                         ),
-                  value: service.id,
-                  groupValue: providerWatch.selectedBaseServiceId,
-                  onChanged: (value) => providerRead.setBaseService(value!),
-                  activeColor: theme.primaryColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  onTap: () => providerRead.setBaseService(service.id),
                 ),
               );
             }),
@@ -393,7 +492,7 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.file(image, fit: BoxFit.cover),
+                      child: Image.memory(image, fit: BoxFit.cover),
                     ),
                     Positioned(
                       top: 4,
@@ -479,6 +578,8 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                         final success = await providerRead.submitEntry(
                           auth.currentUser!.companyId,
                           branchId: auth.currentUser!.branchId,
+                          userId: auth.currentUser?.id,
+                          userEmail: auth.currentUser?.email,
                         );
                         if (success && context.mounted) {
                           providerRead.clearForm();

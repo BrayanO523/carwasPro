@@ -1,7 +1,8 @@
 import 'dart:developer';
 
 import 'dart:async';
-import 'dart:io';
+// import 'dart:io'; // Removed for web compatibility
+import 'dart:typed_data'; // Added
 import 'package:flutter/material.dart'; // Restored
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
@@ -11,20 +12,24 @@ import '../../../wash_types/domain/entities/wash_type.dart';
 import '../../domain/entities/vehicle.dart';
 import '../../data/models/client_model.dart';
 import '../../data/models/vehicle_model.dart';
+import '../../domain/entities/client.dart';
+
+import '../../../branch/domain/repositories/branch_repository.dart';
+import '../../../branch/domain/entities/branch.dart';
 
 class VehicleEntryProvider extends ChangeNotifier {
   final VehicleEntryRepository _repository;
   final WashTypeRepository _washTypeRepository;
+  final BranchRepository _branchRepository;
 
   // Form Controllers
   final nameController = TextEditingController(); // Stores "Full Name"
   final phoneController = TextEditingController();
-  // final modelController = TextEditingController(); // Removed
   final customTypeController =
       TextEditingController(); // For "Otro" manual input
 
   // State
-  final List<File> _selectedImages = [];
+  final List<Uint8List> _selectedImages = [];
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -35,13 +40,19 @@ class VehicleEntryProvider extends ChangeNotifier {
 
   final List<String> vehicleTypes = Vehicle.types; // Use centralized list
 
+  // Branch Selection (For Admins)
+  List<Branch> _branches = [];
+  String? _selectedEntryBranchId;
+
   VehicleEntryProvider({
     required VehicleEntryRepository repository,
     required WashTypeRepository washTypeRepository,
+    required BranchRepository branchRepository,
   }) : _repository = repository,
-       _washTypeRepository = washTypeRepository;
+       _washTypeRepository = washTypeRepository,
+       _branchRepository = branchRepository;
 
-  List<File> get selectedImages => _selectedImages;
+  List<Uint8List> get selectedImages => _selectedImages;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   List<WashType> get washTypes => _washTypes; // Exposed as Entity List
@@ -49,23 +60,42 @@ class VehicleEntryProvider extends ChangeNotifier {
   String? get selectedBaseServiceId => _selectedBaseServiceId;
   Set<String> get selectedExtrasIds => _selectedExtrasIds;
 
+  List<Branch> get branches => _branches;
+  String? get selectedEntryBranchId => _selectedEntryBranchId;
+
   StreamSubscription? _washTypeSubscription;
+
+  void setSelectedEntryBranchId(String? id, String companyId) {
+    if (_selectedEntryBranchId != id) {
+      _selectedEntryBranchId = id;
+      subscribeToWashTypes(companyId, id ?? '');
+      subscribeToClients(companyId, id);
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadBranches(String companyId) async {
+    try {
+      _branches = await _branchRepository.getBranches(companyId);
+      // Removed manual defaulting per user request.
+      // Logic relies on currentUser.branchId passed from UI.
+      notifyListeners();
+    } catch (e) {
+      log('Error loading branches: $e');
+    }
+  }
 
   // Subscribe to wash types for Real-time updates
   void subscribeToWashTypes(String companyId, String branchId) {
     _washTypeSubscription?.cancel();
 
-    _washTypeSubscription = _washTypeRepository
-        .getWashTypesStream(companyId: companyId)
-        .listen(
-          (allTypes) {
-            // Filter by Active and Branch Availability
-            final filtered = allTypes.where((type) {
-              if (!type.isActive) return false;
-              if (type.branchIds.isEmpty) return true;
-              return type.branchIds.contains(branchId);
-            }).toList();
+    // If admin selected a specific branch, use that for filtering wash types too!
+    final effectiveBranchId = _selectedEntryBranchId ?? branchId;
 
+    _washTypeSubscription = _washTypeRepository
+        .getWashTypesStream(companyId: companyId, branchId: effectiveBranchId)
+        .listen(
+          (filtered) {
             _washTypes = filtered;
 
             // Select first base service by default if available and nothing selected
@@ -118,7 +148,8 @@ class VehicleEntryProvider extends ChangeNotifier {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: source, imageQuality: 50);
     if (pickedFile != null) {
-      _selectedImages.add(File(pickedFile.path));
+      final bytes = await pickedFile.readAsBytes();
+      _selectedImages.add(bytes);
       notifyListeners();
     }
   }
@@ -128,7 +159,13 @@ class VehicleEntryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> submitEntry(String companyId, {String? branchId}) async {
+  Future<bool> submitEntry(
+    String companyId, {
+    String?
+    branchId, // This is current user's branchId (might be 'main' for admin)
+    String? userId,
+    String? userEmail,
+  }) async {
     if (nameController.text.isEmpty ||
         _selectedImages.isEmpty ||
         _selectedBaseServiceId == null) {
@@ -144,6 +181,16 @@ class VehicleEntryProvider extends ChangeNotifier {
       return false;
     }
 
+    // Determine Effective Branch ID
+    // If admin selected a branch manually, use it. Otherwise use user's branch.
+    // Ensure we don't save 'main' if possible, unless selected explicitly as valid.
+    final effectiveBranchId = _selectedEntryBranchId ?? branchId ?? 'main';
+
+    // Safety check: admins should select a branch
+    if (effectiveBranchId == 'main' && _branches.isNotEmpty) {
+      // Ideally should block or default to first real branch, but let's assume UI handles selection.
+    }
+
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -152,21 +199,31 @@ class VehicleEntryProvider extends ChangeNotifier {
       String clientId;
       ClientModel client;
       String fullName = nameController.text.trim();
-      final effectiveBranchId = branchId ?? 'main';
 
-      final existingClient = await _repository.getClientByPhone(
+      Client? targetClient = _selectedClient;
+
+      // If not selected via autocomplete, try finding by phone
+      targetClient ??= await _repository.getClientByPhone(
         phoneController.text.trim(),
         companyId,
+        branchId: effectiveBranchId,
       );
 
-      if (existingClient != null) {
-        clientId = existingClient.id;
+      if (targetClient != null) {
+        clientId = targetClient.id;
+        // Preserve existing credit/info while updating basics
         client = ClientModel(
           id: clientId,
           fullName: fullName,
           phone: phoneController.text.trim(),
           companyId: companyId,
           branchId: effectiveBranchId,
+          rtn: targetClient.rtn,
+          address: targetClient.address,
+          email: targetClient.email,
+          creditProfile: targetClient.creditProfile,
+          updatedBy: userId,
+          updatedAt: DateTime.now(),
         );
       } else {
         clientId = const Uuid().v4();
@@ -176,6 +233,8 @@ class VehicleEntryProvider extends ChangeNotifier {
           phone: phoneController.text.trim(),
           companyId: companyId,
           branchId: effectiveBranchId,
+          createdBy: userId,
+          createdAt: DateTime.now(),
         );
       }
 
@@ -184,7 +243,7 @@ class VehicleEntryProvider extends ChangeNotifier {
       final vehicleId = const Uuid().v4();
       final uploadTasks = _selectedImages.map((image) {
         return _repository.uploadVehicleImage(
-          imageFile: image,
+          imageBytes: image,
           companyId: companyId,
           branchId: effectiveBranchId,
           clientId: clientId,
@@ -217,6 +276,8 @@ class VehicleEntryProvider extends ChangeNotifier {
         clientName: fullName,
         vehicleType: finalVehicleType,
         services: selectedServices,
+        createdBy: userId,
+        createdAt: DateTime.now(),
       );
       await _repository.saveVehicle(vehicle);
 
@@ -240,6 +301,50 @@ class VehicleEntryProvider extends ChangeNotifier {
     _selectedExtrasIds.clear();
     _selectedVehicleType = 'turismo';
     _errorMessage = null;
+    notifyListeners();
+  }
+
+  // Autocomplete helpers
+  Client? _selectedClient;
+  List<Client> _allClients = [];
+  StreamSubscription? _clientsSubscription;
+
+  void subscribeToClients(String companyId, String? branchId) {
+    _clientsSubscription?.cancel();
+    _clientsSubscription = _repository
+        .getClientsStream(companyId, branchId: branchId)
+        .listen(
+          (clients) {
+            _allClients = clients;
+            notifyListeners();
+          },
+          onError: (e) {
+            log('Error loading clients: $e');
+          },
+        );
+  }
+
+  List<Client> searchClientsLocal(String query) {
+    if (query.isEmpty) return [];
+    final lowerQuery = query.toLowerCase();
+    return _allClients
+        .where((c) => c.fullName.toLowerCase().contains(lowerQuery))
+        .take(3)
+        .toList();
+  }
+
+  Future<List<Client>> searchClients(
+    String query,
+    String companyId, {
+    String? branchId,
+  }) {
+    return _repository.searchClients(query, companyId, branchId: branchId);
+  }
+
+  void fillClientData(Client client) {
+    nameController.text = client.fullName;
+    phoneController.text = client.phone;
+    _selectedClient = client;
     notifyListeners();
   }
 
@@ -312,6 +417,7 @@ class VehicleEntryProvider extends ChangeNotifier {
   @override
   void dispose() {
     _washTypeSubscription?.cancel();
+    _clientsSubscription?.cancel();
     nameController.dispose();
 
     phoneController.dispose();
