@@ -108,6 +108,7 @@ class _WashTypeFormScreenState extends State<WashTypeFormScreen> {
       companyId: user.companyId,
       branchIds: _selectedBranchIds,
       isGlobal: widget.washType?.companyId == null && widget.washType != null,
+      userId: user.id,
     );
 
     if (success && mounted) {

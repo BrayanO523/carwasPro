@@ -27,12 +27,16 @@ class _WashTypeListScreenState extends State<WashTypeListScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = context.read<AuthProvider>();
       final companyId = authProvider.currentUser?.companyId ?? '';
+      final branchId = authProvider.currentUser?.branchId;
 
       // Load both
-      context.read<WashTypeProvider>().loadWashTypes(companyId);
+      context.read<WashTypeProvider>().loadWashTypes(
+        companyId,
+        branchId: branchId,
+      );
       context.read<ProductProvider>().loadProducts(
         companyId,
-        // branchId: authProvider.currentUser?.branchId, // Show ALL for config
+        branchId: branchId,
       );
     });
   }
@@ -145,7 +149,12 @@ class _ServicesListState extends State<_ServicesList> {
               onPressed: () {
                 final authProvider = context.read<AuthProvider>();
                 final companyId = authProvider.currentUser?.companyId ?? '';
-                provider.loadWashTypes(companyId, force: true);
+                final branchId = authProvider.currentUser?.branchId;
+                provider.loadWashTypes(
+                  companyId,
+                  branchId: branchId,
+                  force: true,
+                );
               },
               child: const Text('Reintentar'),
             ),
@@ -202,11 +211,42 @@ class _ServicesListState extends State<_ServicesList> {
             onRefresh: () async {
               final authProvider = context.read<AuthProvider>();
               final companyId = authProvider.currentUser?.companyId ?? '';
-              await provider.loadWashTypes(companyId, force: true);
+              final branchId = authProvider.currentUser?.branchId;
+              await provider.loadWashTypes(
+                companyId,
+                branchId: branchId,
+                force: true,
+              );
             },
             child: filteredList.isEmpty
-                ? const Center(
-                    child: Text('No hay servicios con estos filtros.'),
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('No hay servicios con estos filtros.'),
+                        const SizedBox(height: 16),
+                        if (filteredList.isEmpty &&
+                            _searchQuery.isEmpty &&
+                            _selectedCategory == null)
+                          FilledButton.icon(
+                            onPressed: () async {
+                              final authProvider = context.read<AuthProvider>();
+                              final user = authProvider.currentUser;
+                              if (user != null) {
+                                await provider.seedDefaultCatalog(
+                                  user.companyId,
+                                  user.branchId ?? '',
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.copy_all),
+                            label: const Text('Crear Servicios Básicos'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.blueGrey,
+                            ),
+                          ),
+                      ],
+                    ),
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),

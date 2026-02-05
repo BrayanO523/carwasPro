@@ -19,5 +19,14 @@ class Product {
     required this.category,
     this.imageUrl,
     this.isActive = true,
+    this.createdBy,
+    this.createdAt,
+    this.updatedBy,
+    this.updatedAt,
   });
+
+  final String? createdBy;
+  final DateTime? createdAt;
+  final String? updatedBy;
+  final DateTime? updatedAt;
 }

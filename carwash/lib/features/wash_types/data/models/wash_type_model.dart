@@ -11,6 +11,10 @@ class WashTypeModel extends WashType {
     required super.prices,
     super.companyId,
     super.branchIds = const [],
+    super.createdBy,
+    super.createdAt,
+    super.updatedBy,
+    super.updatedAt,
   });
 
   factory WashTypeModel.fromFirestore(DocumentSnapshot doc) {
@@ -31,6 +35,14 @@ class WashTypeModel extends WashType {
       prices: convertedPrices,
       companyId: data['empresa_id'],
       branchIds: List<String>.from(data['sucursal_ids'] ?? []),
+      createdBy: data['createdBy'],
+      createdAt: data['createdAt'] != null
+          ? (data['createdAt'] as Timestamp).toDate()
+          : null,
+      updatedBy: data['updatedBy'],
+      updatedAt: data['updatedAt'] != null
+          ? (data['updatedAt'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -43,6 +55,10 @@ class WashTypeModel extends WashType {
       'precios': prices,
       'empresa_id': companyId,
       'sucursal_ids': branchIds,
+      'createdBy': createdBy,
+      'createdAt': createdAt,
+      'updatedBy': updatedBy,
+      'updatedAt': updatedAt,
     };
   }
 

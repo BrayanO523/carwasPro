@@ -112,7 +112,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     );
 
     try {
-      await context.read<ProductProvider>().saveProduct(newProduct);
+      await context.read<ProductProvider>().saveProduct(
+        newProduct,
+        authProvider.currentUser!.id,
+      );
       if (mounted) {
         context.pop();
         ScaffoldMessenger.of(context).showSnackBar(

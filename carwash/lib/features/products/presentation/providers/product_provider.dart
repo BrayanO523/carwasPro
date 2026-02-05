@@ -43,12 +43,46 @@ class ProductProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> saveProduct(Product product) async {
+  Future<void> saveProduct(Product product, String userId) async {
     try {
       _isLoading = true;
       notifyListeners();
 
-      await _repository.saveProduct(product);
+      Product productToSave;
+      if (product.id.isEmpty) {
+        // Create
+        productToSave = Product(
+          id: '',
+          companyId: product.companyId,
+          branchIds: product.branchIds,
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          category: product.category,
+          imageUrl: product.imageUrl,
+          isActive: product.isActive,
+          createdBy: userId,
+          createdAt: DateTime.now(),
+        );
+      } else {
+        // Update
+        productToSave = Product(
+          id: product.id,
+          companyId: product.companyId,
+          branchIds: product.branchIds,
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          category: product.category,
+          imageUrl: product.imageUrl,
+          isActive: product.isActive,
+          createdBy: product.createdBy,
+          createdAt: product.createdAt,
+          updatedBy: userId,
+          updatedAt: DateTime.now(),
+        );
+      }
+      await _repository.saveProduct(productToSave);
 
       // Reload logic could be optimized, but ensuring consistency for now
       // Assuming we have companyId and branchId from the product saved

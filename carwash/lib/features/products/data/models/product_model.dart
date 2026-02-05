@@ -12,6 +12,10 @@ class ProductModel extends Product {
     required super.category,
     super.imageUrl,
     super.isActive,
+    super.createdBy,
+    super.createdAt,
+    super.updatedBy,
+    super.updatedAt,
   });
 
   factory ProductModel.fromFirestore(DocumentSnapshot doc) {
@@ -26,6 +30,14 @@ class ProductModel extends Product {
       category: data['categoria'] ?? 'General',
       imageUrl: data['imagen_url'],
       isActive: data['activo'] ?? true,
+      createdBy: data['createdBy'],
+      createdAt: data['createdAt'] != null
+          ? (data['createdAt'] as Timestamp).toDate()
+          : null,
+      updatedBy: data['updatedBy'],
+      updatedAt: data['updatedAt'] != null
+          ? (data['updatedAt'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -39,7 +51,10 @@ class ProductModel extends Product {
       'categoria': category,
       'imagen_url': imageUrl,
       'activo': isActive,
-      'fecha_creacion': FieldValue.serverTimestamp(),
+      'createdBy': createdBy,
+      'createdAt': createdAt,
+      'updatedBy': updatedBy,
+      'updatedAt': updatedAt,
     };
   }
 }
