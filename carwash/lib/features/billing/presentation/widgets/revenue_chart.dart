@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:syncfusion_flutter_charts/charts.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../providers/balance_provider.dart';
 
 /// Revenue Chart Widget - Uses BalanceProvider for data aggregation (MVVM Compliant)
@@ -15,41 +15,11 @@ class RevenueChart extends StatefulWidget {
 
 class _RevenueChartState extends State<RevenueChart> {
   ChartViewMode _viewMode = ChartViewMode.daily;
-  late TrackballBehavior _trackballBehavior;
 
   // Premium Colors
   static const Color _primaryBlue = Color(0xFF3B82F6);
   static const Color _accentBlue = Color(0xFF60A5FA);
   static const Color _darkBlue = Color(0xFF1E40AF);
-
-  @override
-  void initState() {
-    super.initState();
-    _trackballBehavior = TrackballBehavior(
-      enable: true,
-      activationMode: ActivationMode.singleTap,
-      tooltipSettings: InteractiveTooltip(
-        enable: true,
-        color: const Color(0xFF1E293B),
-        textStyle: GoogleFonts.outfit(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      lineType: TrackballLineType.vertical,
-      lineColor: _primaryBlue.withValues(alpha: 0.3),
-      lineWidth: 1,
-      markerSettings: const TrackballMarkerSettings(
-        markerVisibility: TrackballVisibilityMode.visible,
-        height: 8,
-        width: 8,
-        borderWidth: 2,
-        color: Colors.white,
-        borderColor: _primaryBlue,
-      ),
-    );
-  }
 
   String _getTitle() {
     final now = DateTime.now();
@@ -94,52 +64,143 @@ class _RevenueChartState extends State<RevenueChart> {
           _buildHeader(chartData),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 16, 16),
-            child: SizedBox(
-              height: 200,
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                trackballBehavior: _trackballBehavior,
-                primaryXAxis: CategoryAxis(
-                  majorGridLines: const MajorGridLines(width: 0),
-                  axisLine: AxisLine(width: 0.5, color: Colors.grey.shade200),
-                  labelStyle: GoogleFonts.outfit(
+            child: SizedBox(height: 200, child: _buildLineChart(chartData)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLineChart(List<RevenueChartData> chartData) {
+    if (chartData.isEmpty) {
+      return Center(
+        child: Text('Sin datos', style: GoogleFonts.outfit(color: Colors.grey)),
+      );
+    }
+
+    final spots = <FlSpot>[];
+    for (int i = 0; i < chartData.length; i++) {
+      spots.add(FlSpot(i.toDouble(), chartData[i].revenue));
+    }
+
+    final maxY = chartData
+        .map((e) => e.revenue)
+        .reduce((a, b) => a > b ? a : b);
+
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: maxY > 0 ? maxY / 4 : 1,
+          getDrawingHorizontalLine: (value) => FlLine(
+            color: Colors.grey.shade100,
+            strokeWidth: 1,
+            dashArray: [4, 4],
+          ),
+        ),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 45,
+              getTitlesWidget: (value, meta) {
+                return Text(
+                  NumberFormat.compact(locale: 'es').format(value),
+                  style: GoogleFonts.outfit(
                     fontSize: 9,
                     color: Colors.blueGrey[400],
-                    fontWeight: FontWeight.w500,
                   ),
-                  labelRotation: chartData.length > 12 ? -45 : 0,
-                  majorTickLines: const MajorTickLines(size: 0),
-                ),
-                primaryYAxis: NumericAxis(
-                  numberFormat: NumberFormat.compact(locale: 'es'),
-                  majorGridLines: MajorGridLines(
-                    width: 0.5,
-                    color: Colors.grey.shade100,
-                    dashArray: const [4, 4],
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              interval: chartData.length > 12 ? 2 : 1,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 || index >= chartData.length) {
+                  return const SizedBox.shrink();
+                }
+                return Transform.rotate(
+                  angle: chartData.length > 12 ? -0.5 : 0,
+                  child: Text(
+                    chartData[index].label,
+                    style: GoogleFonts.outfit(
+                      fontSize: 9,
+                      color: Colors.blueGrey[400],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  axisLine: const AxisLine(width: 0),
-                  labelStyle: GoogleFonts.outfit(
-                    fontSize: 9,
-                    color: Colors.blueGrey[400],
-                  ),
-                  majorTickLines: const MajorTickLines(size: 0),
-                ),
-                series: <CartesianSeries>[
-                  FastLineSeries<RevenueChartData, String>(
-                    dataSource: chartData,
-                    xValueMapper: (data, _) => data.label,
-                    yValueMapper: (data, _) => data.revenue,
-                    color: _primaryBlue,
-                    width: 2.5,
-                    animationDuration: 800,
-                    enableTooltip: true,
-                  ),
+                );
+              },
+            ),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            curveSmoothness: 0.3,
+            color: _primaryBlue,
+            barWidth: 2.5,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) {
+                return FlDotCirclePainter(
+                  radius: 3,
+                  color: Colors.white,
+                  strokeWidth: 2,
+                  strokeColor: _primaryBlue,
+                );
+              },
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                colors: [
+                  _primaryBlue.withValues(alpha: 0.2),
+                  _primaryBlue.withValues(alpha: 0.0),
                 ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
               ),
             ),
           ),
         ],
+        lineTouchData: LineTouchData(
+          enabled: true,
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (spot) => const Color(0xFF1E293B),
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                final index = spot.x.toInt();
+                final data = chartData[index];
+                return LineTooltipItem(
+                  '${data.label}\nL. ${NumberFormat('#,##0', 'es').format(data.revenue)}',
+                  GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
       ),
+      duration: const Duration(milliseconds: 300),
     );
   }
 
