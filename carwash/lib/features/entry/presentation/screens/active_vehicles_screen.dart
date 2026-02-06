@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:carwash/core/constants/app_permissions.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,7 @@ import 'package:carwash/features/entry/domain/entities/vehicle.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/full_screen_image_viewer.dart';
 import 'package:quickalert/quickalert.dart';
+import 'vehicle_entry_screen.dart';
 
 class ActiveVehiclesScreen extends StatefulWidget {
   const ActiveVehiclesScreen({super.key});
@@ -126,18 +128,23 @@ class _ActiveVehiclesScreenState extends State<ActiveVehiclesScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 24),
-                                    FilledButton.icon(
-                                      onPressed: () =>
-                                          context.push('/vehicle-entry'),
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('Agregar Vehículo'),
-                                      style: FilledButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 24,
-                                          vertical: 12,
+                                    if (context
+                                        .read<AuthProvider>()
+                                        .hasPermission(
+                                          AppPermissions.createVehicle,
+                                        ))
+                                      FilledButton.icon(
+                                        onPressed: () =>
+                                            context.push('/vehicle-entry'),
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Agregar Vehículo'),
+                                        style: FilledButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 24,
+                                            vertical: 12,
+                                          ),
                                         ),
                                       ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -250,8 +257,9 @@ class _VehicleCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    if (context.read<AuthProvider>().currentUser?.role ==
-                        'admin')
+                    if (context.read<AuthProvider>().hasPermission(
+                      AppPermissions.changeVehicleStatus,
+                    ))
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
@@ -333,6 +341,95 @@ class _VehicleCard extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // Actions Menu
+              if (context.read<AuthProvider>().hasPermission(
+                    AppPermissions.editVehicle,
+                  ) ||
+                  context.read<AuthProvider>().hasPermission(
+                    AppPermissions.deleteVehicle,
+                  ))
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.grey),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => VehicleEntryScreen(vehicle: vehicle),
+                        ),
+                      ).then((_) {
+                        if (context.mounted) {
+                          context.read<ActiveVehiclesProvider>().refresh();
+                        }
+                      });
+                    } else if (value == 'delete') {
+                      QuickAlert.show(
+                        context: context,
+                        type: QuickAlertType.confirm,
+                        title: '¿Eliminar Vehículo?',
+                        text: 'Esta acción no se puede deshacer.',
+                        confirmBtnText: 'Eliminar',
+                        cancelBtnText: 'Cancelar',
+                        confirmBtnColor: Colors.red,
+                        onConfirmBtnTap: () async {
+                          Navigator.pop(context); // Close Alert
+                          try {
+                            await context
+                                .read<ActiveVehiclesProvider>()
+                                .deleteVehicle(vehicle.id);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Vehículo eliminado'),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      );
+                    }
+                  },
+                  itemBuilder: (context) {
+                    final auth = context.read<AuthProvider>();
+                    return [
+                      if (auth.hasPermission(AppPermissions.editVehicle))
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit, color: Colors.blue),
+                              SizedBox(width: 8),
+                              Text('Editar'),
+                            ],
+                          ),
+                        ),
+                      if (auth.hasPermission(AppPermissions.deleteVehicle))
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text(
+                                'Eliminar',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ];
+                  },
+                ),
             ],
           ),
         ),

@@ -1,9 +1,9 @@
+import 'package:carwash/core/constants/app_permissions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/user_management_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../domain/entities/user_entity.dart';
 
 class UserListScreen extends StatefulWidget {
   const UserListScreen({super.key});
@@ -33,13 +33,14 @@ class _UserListScreenState extends State<UserListScreen> {
         title: const Text('Usuarios'),
         backgroundColor: Colors.transparent,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/user-create'),
-        backgroundColor: const Color(
-          0xFFA78BFA,
-        ), // Purple color matching home card
-        child: const Icon(Icons.person_add_rounded, color: Colors.white),
-      ),
+      floatingActionButton:
+          context.read<AuthProvider>().hasPermission(AppPermissions.createUser)
+          ? FloatingActionButton(
+              onPressed: () => context.push('/user-form'),
+              backgroundColor: const Color(0xFFA78BFA),
+              child: const Icon(Icons.person_add_rounded, color: Colors.white),
+            )
+          : null,
       body: userProvider.isLoading && userProvider.users.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -116,7 +117,6 @@ class _UserListScreenState extends State<UserListScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: ListTile(
-                            onTap: () => _showEditUserDialog(context, user),
                             leading: CircleAvatar(
                               backgroundColor: const Color(
                                 0xFFA78BFA,
@@ -140,209 +140,26 @@ class _UserListScreenState extends State<UserListScreen> {
                                 ),
                               ],
                             ),
+                            trailing:
+                                context.read<AuthProvider>().hasPermission(
+                                  AppPermissions.editUser,
+                                )
+                                ? const Icon(
+                                    Icons.chevron_right,
+                                    color: Colors.grey,
+                                  )
+                                : null,
+                            onTap:
+                                context.read<AuthProvider>().hasPermission(
+                                  AppPermissions.editUser,
+                                )
+                                ? () => context.push('/user-form', extra: user)
+                                : null,
                           ),
                         );
                       },
                     ),
             ),
-    );
-  }
-
-  void _showEditUserDialog(BuildContext context, UserEntity user) {
-    final provider = context.read<UserManagementProvider>();
-    final currentUser = context.read<AuthProvider>().currentUser;
-    final companyId = currentUser?.companyId;
-    final operatorId = currentUser?.id;
-    final nameController = TextEditingController(text: user.name);
-    final emissionPointController = TextEditingController(
-      text: user.emissionPoint ?? '001',
-    );
-    String? selectedBranchId = user.branchId;
-    bool isLoading = false;
-    String? localError;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setState) {
-          // Safe Branch Init checks if the user's branch is still valid in the list
-          // If not, we nullify it to force re-selection, avoiding crash
-          if (selectedBranchId != null &&
-              !provider.branches.any((b) => b.id == selectedBranchId)) {
-            selectedBranchId = null;
-          }
-
-          return AlertDialog(
-            title: const Text('Editar Usuario'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(labelText: 'Nombre'),
-                  ),
-                  const SizedBox(height: 16),
-                  if (user.role == 'admin')
-                    TextField(
-                      controller: emissionPointController,
-                      decoration: const InputDecoration(
-                        labelText: 'Punto de Emisión (SAR)',
-                      ),
-                      maxLength: 3,
-                      keyboardType: TextInputType.number,
-                    ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'Sucursal'),
-                    value: selectedBranchId,
-                    items: provider.branches.map((branch) {
-                      return DropdownMenuItem(
-                        value: branch.id,
-                        child: Text(branch.name),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedBranchId = value;
-                      });
-                    },
-                  ),
-                  if (localError != null) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      localError!,
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              if (!isLoading)
-                TextButton(
-                  onPressed: () async {
-                    // Delete Confirmation
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (c) => AlertDialog(
-                        title: const Text('Eliminar Usuario'),
-                        content: const Text(
-                          '¿Estás seguro de que deseas eliminar este usuario?',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(c, false),
-                            child: const Text('Cancelar'),
-                          ),
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.red,
-                            ),
-                            onPressed: () => Navigator.pop(c, true),
-                            child: const Text('Eliminar'),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    if (confirm == true && companyId != null && ctx.mounted) {
-                      setState(() => isLoading = true);
-                      final success = await provider.deleteUser(
-                        userId: user.id,
-                        companyId: companyId,
-                        operatorId: operatorId,
-                      );
-                      if (success && ctx.mounted) {
-                        Navigator.pop(ctx);
-                      } else {
-                        if (ctx.mounted) {
-                          setState(() {
-                            isLoading = false;
-                            localError =
-                                provider.errorMessage ?? 'Error al eliminar';
-                          });
-                        }
-                      }
-                    }
-                  },
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('Eliminar'),
-                ),
-              TextButton(
-                onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                onPressed: isLoading
-                    ? null
-                    : () async {
-                        if (selectedBranchId == null) {
-                          setState(
-                            () => localError = 'Seleccione una sucursal',
-                          );
-                          return;
-                        }
-                        if (companyId != null) {
-                          setState(() {
-                            isLoading = true;
-                            localError = null;
-                          });
-
-                          final success = await provider.updateUser(
-                            userId: user.id,
-                            name: nameController.text.trim(),
-                            branchId: selectedBranchId,
-                            companyId: companyId,
-                            // Force null if not admin, otherwise use controller value
-                            emissionPoint: user.role == 'admin'
-                                ? emissionPointController.text.trim()
-                                : null,
-                            operatorId: operatorId,
-                          );
-
-                          if (success && ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Usuario actualizado exitosamente',
-                                ),
-                              ),
-                            );
-                          } else {
-                            if (ctx.mounted) {
-                              setState(() {
-                                isLoading = false;
-                                localError =
-                                    provider.errorMessage ??
-                                    'Error al actualizar';
-                              });
-                            }
-                          }
-                        } else {
-                          // Company ID is null
-                          setState(() {
-                            localError =
-                                'Error: No se encontró ID de empresa. Cierre sesión e intente de nuevo.';
-                          });
-                        }
-                      },
-                child: isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Guardar'),
-              ),
-            ],
-          );
-        },
-      ),
     );
   }
 }

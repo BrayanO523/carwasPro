@@ -48,7 +48,7 @@ class _RevenueChartState extends State<RevenueChart> {
         ),
       ),
       lineType: TrackballLineType.vertical,
-      lineColor: _primaryBlue.withOpacity(0.3),
+      lineColor: _primaryBlue.withValues(alpha: 0.3),
       lineWidth: 1,
       markerSettings: const TrackballMarkerSettings(
         markerVisibility: TrackballVisibilityMode.visible,
@@ -203,7 +203,7 @@ class _RevenueChartState extends State<RevenueChart> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: _primaryBlue.withOpacity(0.08),
+            color: _primaryBlue.withValues(alpha: 0.08),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -280,7 +280,7 @@ class _RevenueChartState extends State<RevenueChart> {
               borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
-                  color: _primaryBlue.withOpacity(0.25),
+                  color: _primaryBlue.withValues(alpha: 0.25),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
@@ -355,7 +355,7 @@ class _RevenueChartState extends State<RevenueChart> {
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: _primaryBlue.withOpacity(0.3),
+                    color: _primaryBlue.withValues(alpha: 0.3),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
