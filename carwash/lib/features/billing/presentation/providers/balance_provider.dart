@@ -6,6 +6,18 @@ import '../../domain/entities/invoice.dart';
 
 import '../../domain/repositories/balance_repository.dart';
 
+/// Chart view mode for revenue aggregation
+enum ChartViewMode { daily, weekly, monthly }
+
+/// Data class for chart points
+class RevenueChartData {
+  final String label;
+  final double revenue;
+  final int count;
+
+  RevenueChartData(this.label, this.revenue, this.count);
+}
+
 class BalanceProvider extends ChangeNotifier {
   final BalanceRepository _repository;
 
@@ -26,6 +38,119 @@ class BalanceProvider extends ChangeNotifier {
   double get totalIncome =>
       invoices.fold(0, (acc, item) => acc + item.totalAmount);
   int get totalInvoices => invoices.length;
+
+  /// Generates aggregated chart data based on view mode (Daily/Weekly/Monthly)
+  List<RevenueChartData> getChartData(ChartViewMode viewMode) {
+    final now = DateTime.now();
+
+    switch (viewMode) {
+      case ChartViewMode.daily:
+        final todayStart = DateTime(now.year, now.month, now.day);
+        final todayEnd = todayStart.add(const Duration(days: 1));
+
+        final todayInvoices = _invoices
+            .where(
+              (inv) =>
+                  inv.createdAt.isAfter(
+                    todayStart.subtract(const Duration(seconds: 1)),
+                  ) &&
+                  inv.createdAt.isBefore(todayEnd),
+            )
+            .toList();
+
+        Map<int, double> hourlyData = {};
+        Map<int, int> hourlyCounts = {};
+
+        for (var inv in todayInvoices) {
+          final hour = inv.createdAt.hour;
+          hourlyData[hour] = (hourlyData[hour] ?? 0) + inv.totalAmount;
+          hourlyCounts[hour] = (hourlyCounts[hour] ?? 0) + 1;
+        }
+
+        List<RevenueChartData> result = [];
+        // Fixed Business Hours: 7am to 9pm (ensures line continuity)
+        for (int h = 7; h <= 21; h++) {
+          final label = h < 12 ? '${h}am' : (h == 12 ? '12pm' : '${h - 12}pm');
+          result.add(
+            RevenueChartData(label, hourlyData[h] ?? 0, hourlyCounts[h] ?? 0),
+          );
+        }
+        return result;
+
+      case ChartViewMode.weekly:
+        final weekday = now.weekday;
+        final weekStart = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(Duration(days: weekday - 1));
+        final weekEnd = weekStart.add(const Duration(days: 7));
+
+        final weekInvoices = _invoices
+            .where(
+              (inv) =>
+                  inv.createdAt.isAfter(
+                    weekStart.subtract(const Duration(seconds: 1)),
+                  ) &&
+                  inv.createdAt.isBefore(weekEnd),
+            )
+            .toList();
+
+        Map<int, double> dailyData = {};
+        Map<int, int> dailyCounts = {};
+
+        for (var inv in weekInvoices) {
+          final day = inv.createdAt.weekday;
+          dailyData[day] = (dailyData[day] ?? 0) + inv.totalAmount;
+          dailyCounts[day] = (dailyCounts[day] ?? 0) + 1;
+        }
+
+        const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+        List<RevenueChartData> weekResult = [];
+        for (int d = 1; d <= 7; d++) {
+          weekResult.add(
+            RevenueChartData(
+              dayNames[d - 1],
+              dailyData[d] ?? 0,
+              dailyCounts[d] ?? 0,
+            ),
+          );
+        }
+        return weekResult;
+
+      case ChartViewMode.monthly:
+        final monthStart = DateTime(now.year, now.month, 1);
+        final nextMonth = DateTime(now.year, now.month + 1, 1);
+
+        final monthInvoices = _invoices
+            .where(
+              (inv) =>
+                  inv.createdAt.isAfter(
+                    monthStart.subtract(const Duration(seconds: 1)),
+                  ) &&
+                  inv.createdAt.isBefore(nextMonth),
+            )
+            .toList();
+
+        Map<int, double> monthlyData = {};
+        Map<int, int> monthlyCounts = {};
+
+        for (var inv in monthInvoices) {
+          final day = inv.createdAt.day;
+          monthlyData[day] = (monthlyData[day] ?? 0) + inv.totalAmount;
+          monthlyCounts[day] = (monthlyCounts[day] ?? 0) + 1;
+        }
+
+        List<RevenueChartData> monthResult = [];
+        final maxDay = now.day;
+        for (int d = 1; d <= maxDay; d++) {
+          monthResult.add(
+            RevenueChartData('$d', monthlyData[d] ?? 0, monthlyCounts[d] ?? 0),
+          );
+        }
+        return monthResult;
+    }
+  }
 
   void setSearchText(String text) {
     _searchText = text;

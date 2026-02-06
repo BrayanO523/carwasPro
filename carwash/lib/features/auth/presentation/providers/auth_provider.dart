@@ -40,6 +40,13 @@ class AuthProvider extends ChangeNotifier {
   String? get companyName => _companyName;
   String? get branchName => _branchName;
 
+  bool hasPermission(String permission) {
+    if (_currentUser == null) return false;
+    // Admins have full access
+    if (_currentUser!.role == 'admin') return true;
+    return _currentUser!.permissions.contains(permission);
+  }
+
   Future<void> _loadAdditionalUserInfo() async {
     final user = _currentUser;
     if (user == null) {

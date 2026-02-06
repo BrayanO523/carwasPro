@@ -13,6 +13,8 @@ abstract class VehicleEntryRepository {
   });
   Future<Client?> getClientById(String id);
   Future<void> saveVehicle(Vehicle vehicle);
+  Future<void> updateVehicle(Vehicle vehicle); // Added
+  Future<void> deleteVehicle(String vehicleId); // Added
   Future<String> uploadVehicleImage({
     required Uint8List imageBytes,
     required String companyId,

@@ -1,7 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -9,8 +8,12 @@ import '../../presentation/providers/vehicle_entry_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/client.dart'; // Added Import
 
+import '../../domain/entities/vehicle.dart'; // Ensure Import
+
 class VehicleEntryScreen extends StatefulWidget {
-  const VehicleEntryScreen({super.key});
+  final Vehicle? vehicle; // Added optional vehicle param
+
+  const VehicleEntryScreen({super.key, this.vehicle});
 
   @override
   State<VehicleEntryScreen> createState() => _VehicleEntryScreenState();
@@ -34,21 +37,29 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
       final provider = context.read<VehicleEntryProvider>();
       final authProvider = context.read<AuthProvider>();
       final currentUser = authProvider.currentUser;
+
+      // Clear previous form data to avoid stale state
+      provider.clearForm();
+
       if (currentUser?.companyId != null) {
         if (currentUser!.role == 'admin') {
           provider.loadBranches(currentUser.companyId);
         }
-        provider.subscribeToWashTypes(
-          currentUser.companyId,
-          currentUser.branchId ?? '',
-        );
-        provider.subscribeToClients(
-          currentUser.companyId,
-          currentUser.branchId,
-        );
+
+        final branchId = widget.vehicle?.branchId ?? currentUser.branchId ?? '';
+
+        provider.subscribeToWashTypes(currentUser.companyId, branchId);
+        provider.subscribeToClients(currentUser.companyId, branchId);
+
+        // Initialize for Edit if vehicle provided
+        if (widget.vehicle != null) {
+          provider.setVehicle(widget.vehicle!);
+        }
       }
     });
   }
+
+  // ... (methods _getVehicleIcon, _nextStep, _prevStep remain same)
 
   IconData _getVehicleIcon(String type) {
     switch (type.toLowerCase()) {
@@ -242,9 +253,9 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                 mainAxisSpacing: 12,
                 childAspectRatio: 0.85,
               ),
-              itemCount: providerRead.vehicleTypes.length,
+              itemCount: providerRead.vehicleTypesList.length,
               itemBuilder: (context, index) {
-                final type = providerRead.vehicleTypes[index];
+                final type = providerWatch.vehicleTypesList[index];
                 final isSelected = providerWatch.selectedVehicleType == type;
                 return _VehicleTypeCard(
                   title: type.toUpperCase().replaceAll('_', ' '),
@@ -455,9 +466,15 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
               ),
-              itemCount: providerWatch.selectedImages.length + 1,
+              itemCount:
+                  providerWatch.existingPhotoUrls.length +
+                  providerWatch.selectedImages.length +
+                  1,
               itemBuilder: (context, index) {
-                if (index == providerWatch.selectedImages.length) {
+                // 1. Add Button (Last Item)
+                if (index ==
+                    providerWatch.existingPhotoUrls.length +
+                        providerWatch.selectedImages.length) {
                   return GestureDetector(
                     onTap: providerRead.pickImage,
                     child: Container(
@@ -486,7 +503,50 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                     ),
                   );
                 }
-                final image = providerWatch.selectedImages[index];
+
+                // 2. Existing Images (First Group)
+                if (index < providerWatch.existingPhotoUrls.length) {
+                  final url = providerWatch.existingPhotoUrls[index];
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: CachedNetworkImage(
+                          imageUrl: url,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) =>
+                              Container(color: Colors.grey[200]),
+                          errorWidget: (context, url, error) =>
+                              const Icon(Icons.error),
+                        ),
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: () => providerRead.removeExistingImage(index),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.red, // Distinct color for existing?
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                // 3. New Images (Second Group)
+                final newIndex = index - providerWatch.existingPhotoUrls.length;
+                final image = providerWatch.selectedImages[newIndex];
                 return Stack(
                   fit: StackFit.expand,
                   children: [
@@ -498,7 +558,7 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                       top: 4,
                       right: 4,
                       child: GestureDetector(
-                        onTap: () => providerRead.removeImage(index),
+                        onTap: () => providerRead.removeImage(newIndex),
                         child: Container(
                           padding: const EdgeInsets.all(4),
                           decoration: const BoxDecoration(
@@ -580,6 +640,7 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                           branchId: auth.currentUser!.branchId,
                           userId: auth.currentUser?.id,
                           userEmail: auth.currentUser?.email,
+                          existingVehicle: widget.vehicle,
                         );
                         if (success && context.mounted) {
                           providerRead.clearForm();
@@ -608,9 +669,11 @@ class _VehicleEntryScreenState extends State<VehicleEntryScreen> {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text(
-                        'Finalizar Ingreso',
-                        style: TextStyle(
+                    : Text(
+                        (widget.vehicle != null)
+                            ? 'Guardar Cambios'
+                            : 'Finalizar Ingreso',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),

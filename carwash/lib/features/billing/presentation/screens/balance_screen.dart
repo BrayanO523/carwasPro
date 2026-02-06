@@ -320,23 +320,9 @@ class _BalanceScreenState extends State<BalanceScreen>
   Widget _buildBalanceTab() {
     final balanceProvider = context.watch<BalanceProvider>();
 
-    // 1. Calculate Aggregates
-    final totalIncome = balanceProvider.invoices.fold(
-      0.0,
-      (sum, item) => sum + item.totalAmount,
-    );
-    final totalInvoices = balanceProvider.invoices.length;
-
-    // 2. Prepare Data for Chart
-    final Map<DateTime, double> dailyRevenue = {};
-    for (var invoice in balanceProvider.invoices) {
-      final date = DateTime(
-        invoice.createdAt.year,
-        invoice.createdAt.month,
-        invoice.createdAt.day,
-      );
-      dailyRevenue[date] = (dailyRevenue[date] ?? 0) + invoice.totalAmount;
-    }
+    // Use Provider getters instead of inline calculations
+    final totalIncome = balanceProvider.totalIncome;
+    final totalInvoices = balanceProvider.totalInvoices;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -381,7 +367,7 @@ class _BalanceScreenState extends State<BalanceScreen>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                             blurRadius: 50,
                             spreadRadius: 10,
                           ),
@@ -555,7 +541,7 @@ class _BalanceScreenState extends State<BalanceScreen>
             ),
             const SizedBox(height: 16),
 
-            RevenueChart(invoices: balanceProvider.invoices),
+            const RevenueChart(),
           ],
         ),
       ),

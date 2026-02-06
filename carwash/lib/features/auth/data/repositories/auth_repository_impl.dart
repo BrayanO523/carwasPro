@@ -79,6 +79,7 @@ class AuthRepositoryImpl implements AuthRepository {
     String? branchId,
     String? emissionPoint,
     String? operatorId,
+    List<String>? permissions,
   }) async {
     FirebaseApp? secondaryApp;
     try {
@@ -111,6 +112,7 @@ class AuthRepositoryImpl implements AuthRepository {
         name: name,
         branchId: branchId,
         emissionPoint: emissionPoint,
+        permissions: permissions ?? [],
         createdBy: operatorId,
         createdAt: DateTime.now(),
       );
@@ -175,6 +177,7 @@ class AuthRepositoryImpl implements AuthRepository {
         name: name,
         branchId: branchId,
         emissionPoint: emissionPoint, // Added emissionPoint
+        permissions: [],
       );
 
       // 3. Save to Firestore (Now authorized because we are logged in)
@@ -193,6 +196,7 @@ class AuthRepositoryImpl implements AuthRepository {
     String? branchId,
     String? emissionPoint,
     String? operatorId,
+    List<String>? permissions,
   }) async {
     // Get current doc to find companyId
     final doc = await _firestore.collection('usuarios').doc(userId).get();
@@ -205,6 +209,11 @@ class AuthRepositoryImpl implements AuthRepository {
       'updatedBy': operatorId,
       'updatedAt': DateTime.now(),
     };
+
+    if (permissions != null) {
+      updates['permissions'] = permissions;
+    }
+
     await _firestore.collection('usuarios').doc(userId).update(updates);
 
     await _auditRepository.logEvent(

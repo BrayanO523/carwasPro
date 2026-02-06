@@ -13,6 +13,7 @@ abstract class AuthRepository {
     String? branchId,
     String? emissionPoint,
     String? operatorId,
+    List<String>? permissions,
   });
 
   Future<UserEntity?> registerOwner({
@@ -30,6 +31,7 @@ abstract class AuthRepository {
     String? branchId,
     String? emissionPoint,
     String? operatorId,
+    List<String>? permissions,
   });
 
   Future<void> deleteUser(String userId, {String? operatorId});

@@ -1,3 +1,4 @@
+import 'package:carwash/core/constants/app_permissions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -109,7 +110,7 @@ class MenuScreen extends StatelessWidget {
                     const SizedBox(height: 40),
 
                     // Menu Options
-                    if (user?.role == 'admin') ...[
+                    if (authProvider.hasPermission(AppPermissions.viewClients))
                       _MenuItem(
                         title: 'Gestión de Clientes',
                         icon: Icons.people_outline_rounded,
@@ -119,6 +120,7 @@ class MenuScreen extends StatelessWidget {
                           context.push('/client-list');
                         },
                       ),
+                    if (authProvider.hasPermission(AppPermissions.viewBilling))
                       _MenuItem(
                         title: 'Cuentas por Cobrar',
                         icon: Icons.request_quote_rounded,
@@ -128,7 +130,8 @@ class MenuScreen extends StatelessWidget {
                           context.push('/accounts-receivable');
                         },
                       ),
-                      const SizedBox(height: 10),
+                    const SizedBox(height: 10),
+                    if (authProvider.hasPermission(AppPermissions.viewUsers))
                       _MenuItem(
                         title: 'Usuarios',
                         icon: Icons.people_alt_rounded,
@@ -138,6 +141,7 @@ class MenuScreen extends StatelessWidget {
                           context.push('/user-list');
                         },
                       ),
+                    if (authProvider.hasPermission(AppPermissions.viewSettings))
                       _MenuItem(
                         title: 'Empresa',
                         icon: Icons.business_rounded,
@@ -147,6 +151,9 @@ class MenuScreen extends StatelessWidget {
                           context.push('/company-config');
                         },
                       ),
+                    if (authProvider.hasPermission(
+                      AppPermissions.viewInventory,
+                    ))
                       _MenuItem(
                         title: 'Precios (Servicios)',
                         icon: Icons.attach_money_rounded,
@@ -156,11 +163,12 @@ class MenuScreen extends StatelessWidget {
                           context.push('/wash-types');
                         },
                       ),
-                      const Divider(height: 30),
-                    ],
+                    const Divider(height: 30),
 
                     // Quick Actions
-                    if (user?.role == 'admin') ...[
+                    if (authProvider.hasPermission(
+                      AppPermissions.createInventory,
+                    )) ...[
                       Text(
                         'ACCIONES RÁPIDAS',
                         style: GoogleFonts.outfit(

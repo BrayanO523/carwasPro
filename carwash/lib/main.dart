@@ -1,5 +1,5 @@
 import 'package:carwash/features/auth/presentation/screens/user_list_screen.dart';
-import 'package:carwash/features/auth/presentation/screens/user_create_screen.dart';
+import 'package:carwash/features/auth/presentation/screens/user_form_screen.dart';
 import 'package:carwash/features/branch/presentation/screens/branch_list_screen.dart';
 import 'package:carwash/features/branch/presentation/screens/branch_create_screen.dart';
 import 'package:carwash/features/entry/presentation/screens/active_vehicles_screen.dart';
@@ -13,6 +13,7 @@ import 'package:carwash/features/company/presentation/screens/company_config_scr
 import 'package:carwash/features/entry/presentation/screens/client_list_screen.dart'; // NEW
 import 'package:flutter/material.dart';
 import 'package:carwash/features/entry/domain/entities/vehicle.dart';
+import 'package:carwash/features/auth/domain/entities/user_entity.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -46,6 +47,7 @@ import 'features/home/presentation/providers/data_inspector_provider.dart';
 
 // import 'core/utils/wash_types_seeder.dart'; // Removed
 import 'features/billing/domain/repositories/balance_repository.dart';
+import 'features/billing/data/repositories/balance_repository_impl.dart';
 import 'features/billing/presentation/providers/balance_provider.dart';
 
 import 'features/wash_types/data/repositories/wash_type_repository_impl.dart';
@@ -282,8 +284,11 @@ class AppContent extends StatelessWidget {
           builder: (context, state) => const BranchCreateScreen(),
         ),
         GoRoute(
-          path: '/user-create',
-          builder: (context, state) => const UserCreateScreen(),
+          path: '/user-form',
+          builder: (context, state) {
+            final user = state.extra as UserEntity?;
+            return UserFormScreen(user: user);
+          },
         ),
         GoRoute(
           path: '/data-inspector',

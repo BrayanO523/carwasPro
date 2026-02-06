@@ -131,6 +131,18 @@ class ActiveVehiclesProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteVehicle(String vehicleId) async {
+    try {
+      await _repository.deleteVehicle(vehicleId);
+      // Remove from local list to update UI immediately
+      _allVehicles.removeWhere((v) => v.id == vehicleId);
+      notifyListeners();
+    } catch (e) {
+      log('Error deleting vehicle: $e');
+      rethrow;
+    }
+  }
+
   Future<void> completeWashAndNotify({
     required Vehicle vehicle,
     required String companyName,

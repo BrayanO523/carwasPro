@@ -150,7 +150,7 @@ class _UserCreateScreenState extends State<UserCreateScreen> {
                       ),
                       items: const [
                         DropdownMenuItem(
-                          value: 'user',
+                          value: 'employee',
                           child: Text('Empleado'),
                         ),
                         DropdownMenuItem(

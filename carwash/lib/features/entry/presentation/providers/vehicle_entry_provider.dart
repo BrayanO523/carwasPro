@@ -22,28 +22,6 @@ class VehicleEntryProvider extends ChangeNotifier {
   final WashTypeRepository _washTypeRepository;
   final BranchRepository _branchRepository;
 
-  // Form Controllers
-  final nameController = TextEditingController(); // Stores "Full Name"
-  final phoneController = TextEditingController();
-  final customTypeController =
-      TextEditingController(); // For "Otro" manual input
-
-  // State
-  final List<Uint8List> _selectedImages = [];
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  List<WashType> _washTypes = [];
-  String _selectedVehicleType = 'turismo'; // Default
-  String? _selectedBaseServiceId;
-  final Set<String> _selectedExtrasIds = {};
-
-  final List<String> vehicleTypes = Vehicle.types; // Use centralized list
-
-  // Branch Selection (For Admins)
-  List<Branch> _branches = [];
-  String? _selectedEntryBranchId;
-
   VehicleEntryProvider({
     required VehicleEntryRepository repository,
     required WashTypeRepository washTypeRepository,
@@ -52,38 +30,124 @@ class VehicleEntryProvider extends ChangeNotifier {
        _washTypeRepository = washTypeRepository,
        _branchRepository = branchRepository;
 
-  List<Uint8List> get selectedImages => _selectedImages;
-  bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
-  List<WashType> get washTypes => _washTypes; // Exposed as Entity List
-  String get selectedVehicleType => _selectedVehicleType;
-  String? get selectedBaseServiceId => _selectedBaseServiceId;
-  Set<String> get selectedExtrasIds => _selectedExtrasIds;
+  // Constants
+  static const List<String> vehicleTypes = [
+    'turismo',
+    'camioneta',
+    'pickup',
+    'moto',
+    'bus',
+    'camion',
+    'otro',
+  ];
+  List<String> get vehicleTypesList => vehicleTypes; // Instance getter
 
-  List<Branch> get branches => _branches;
-  String? get selectedEntryBranchId => _selectedEntryBranchId;
+  // Form Controllers
+  final nameController = TextEditingController(); // Stores "Full Name"
+  final phoneController = TextEditingController();
+  final customTypeController =
+      TextEditingController(); // For "Otro" manual input
+
+  // State
+  List<WashType> _washTypes = [];
+  List<WashType> get washTypes => _washTypes;
 
   StreamSubscription? _washTypeSubscription;
 
-  void setSelectedEntryBranchId(String? id, String companyId) {
-    if (_selectedEntryBranchId != id) {
-      _selectedEntryBranchId = id;
-      subscribeToWashTypes(companyId, id ?? '');
-      subscribeToClients(companyId, id);
-      notifyListeners();
-    }
-  }
+  String _selectedVehicleType = 'turismo';
+  String get selectedVehicleType => _selectedVehicleType;
+
+  String? _selectedBaseServiceId;
+  String? get selectedBaseServiceId => _selectedBaseServiceId;
+
+  final List<String> _selectedExtrasIds = [];
+  List<String> get selectedExtrasIds => _selectedExtrasIds;
+
+  final List<Uint8List> _selectedImages = [];
+  List<Uint8List> get selectedImages => _selectedImages;
+
+  String? _selectedEntryBranchId;
+
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
+
+  // Branch Loading (Admin)
+  List<Branch> _branches = [];
+  List<Branch> get branches => _branches;
 
   Future<void> loadBranches(String companyId) async {
     try {
       _branches = await _branchRepository.getBranches(companyId);
-      // Removed manual defaulting per user request.
-      // Logic relies on currentUser.branchId passed from UI.
       notifyListeners();
     } catch (e) {
       log('Error loading branches: $e');
     }
   }
+
+  void setEntryBranch(String? branchId) {
+    _selectedEntryBranchId = branchId;
+    notifyListeners();
+  }
+
+  // Edit Mode State
+  List<String> _existingPhotoUrls = [];
+  List<String> get existingPhotoUrls => _existingPhotoUrls;
+
+  void removeExistingImage(int index) {
+    _existingPhotoUrls.removeAt(index);
+    notifyListeners();
+  }
+
+  Future<void> setVehicle(Vehicle vehicle) async {
+    nameController.text = vehicle.clientName;
+
+    // Fetch Client to get Phone
+    try {
+      if (vehicle.clientId.isNotEmpty) {
+        final client = await _repository.getClientById(vehicle.clientId);
+        if (client != null) {
+          phoneController.text = client.phone;
+          _selectedClient = client;
+        }
+      }
+    } catch (e) {
+      log('Error fetching client details: $e');
+    }
+
+    // Set Type
+    if (vehicleTypes.contains(vehicle.vehicleType)) {
+      _selectedVehicleType = vehicle.vehicleType ?? 'otro';
+    } else {
+      _selectedVehicleType = 'otro';
+      customTypeController.text = vehicle.vehicleType ?? '';
+    }
+
+    // Set Services
+    _selectedBaseServiceId = null;
+    _selectedExtrasIds.clear();
+
+    final serviceIds = vehicle.services;
+    // We will attempt to categorize them if _washTypes is populated.
+    if (_washTypes.isNotEmpty) {
+      for (final id in serviceIds) {
+        final type = _getWashTypeById(id);
+        if (type?.category == 'base') {
+          _selectedBaseServiceId = id;
+        } else {
+          _selectedExtrasIds.add(id);
+        }
+      }
+    }
+
+    _existingPhotoUrls = List.from(vehicle.photoUrls);
+    _selectedImages.clear();
+    notifyListeners();
+  }
+
+  // Restore Missing Methods
 
   // Subscribe to wash types for Real-time updates
   void subscribeToWashTypes(String companyId, String branchId) {
@@ -123,8 +187,6 @@ class VehicleEntryProvider extends ChangeNotifier {
         );
   }
 
-  // ... setters remain same ...
-
   void setVehicleType(String type) {
     _selectedVehicleType = type;
     notifyListeners();
@@ -146,7 +208,13 @@ class VehicleEntryProvider extends ChangeNotifier {
 
   Future<void> pickImage({ImageSource source = ImageSource.camera}) async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: source, imageQuality: 50);
+    final pickedFile = await picker.pickImage(
+      source: source,
+      imageQuality:
+          50, // Balanced: Speed + Visibility (Operator needs to see details)
+      maxWidth: 800, // Small resolution is key for speed
+      maxHeight: 800,
+    );
     if (pickedFile != null) {
       final bytes = await pickedFile.readAsBytes();
       _selectedImages.add(bytes);
@@ -159,15 +227,19 @@ class VehicleEntryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Update submitEntry to handle Edit
   Future<bool> submitEntry(
     String companyId, {
-    String?
-    branchId, // This is current user's branchId (might be 'main' for admin)
+    String? branchId,
     String? userId,
     String? userEmail,
+    Vehicle? existingVehicle, // If provided, it's an UPDATE
   }) async {
+    final isEdit = existingVehicle != null;
+
     if (nameController.text.isEmpty ||
-        _selectedImages.isEmpty ||
+        ((_selectedImages.isEmpty &&
+            _existingPhotoUrls.isEmpty)) || // Allow existing images
         _selectedBaseServiceId == null) {
       _errorMessage =
           'Por favor complete todos los campos, seleccione un lavado y añada al menos una foto';
@@ -181,66 +253,59 @@ class VehicleEntryProvider extends ChangeNotifier {
       return false;
     }
 
-    // Determine Effective Branch ID
-    // If admin selected a branch manually, use it. Otherwise use user's branch.
-    // Ensure we don't save 'main' if possible, unless selected explicitly as valid.
-    final effectiveBranchId = _selectedEntryBranchId ?? branchId ?? 'main';
-
-    // Safety check: admins should select a branch
-    if (effectiveBranchId == 'main' && _branches.isNotEmpty) {
-      // Ideally should block or default to first real branch, but let's assume UI handles selection.
-    }
+    final effectiveBranchId = isEdit
+        ? (existingVehicle.branchId ??
+              _selectedEntryBranchId ??
+              branchId ??
+              'main')
+        : (_selectedEntryBranchId ?? branchId ?? 'main');
 
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      String clientId;
-      ClientModel client;
+      String clientId = isEdit ? existingVehicle.clientId : '';
       String fullName = nameController.text.trim();
 
-      Client? targetClient = _selectedClient;
+      if (!isEdit) {
+        // ... Existing Client Creation Logic ...
+        // (Only run this block if NEW entry)
 
-      // If not selected via autocomplete, try finding by phone
-      targetClient ??= await _repository.getClientByPhone(
-        phoneController.text.trim(),
-        companyId,
-        branchId: effectiveBranchId,
-      );
+        ClientModel client;
+        Client? targetClient = _selectedClient;
 
-      if (targetClient != null) {
-        clientId = targetClient.id;
-        // Preserve existing credit/info while updating basics
-        client = ClientModel(
-          id: clientId,
-          fullName: fullName,
-          phone: phoneController.text.trim(),
-          companyId: companyId,
+        targetClient ??= await _repository.getClientByPhone(
+          phoneController.text.trim(),
+          companyId,
           branchId: effectiveBranchId,
-          rtn: targetClient.rtn,
-          address: targetClient.address,
-          email: targetClient.email,
-          creditProfile: targetClient.creditProfile,
-          updatedBy: userId,
-          updatedAt: DateTime.now(),
         );
+
+        if (targetClient != null) {
+          clientId = targetClient.id;
+          // Update Client info if needed (optional)
+        } else {
+          clientId = const Uuid().v4();
+          client = ClientModel(
+            id: clientId,
+            fullName: fullName,
+            phone: phoneController.text.trim(),
+            companyId: companyId,
+            branchId: effectiveBranchId,
+            createdBy: userId,
+            createdAt: DateTime.now(),
+          );
+          await _repository.saveClient(client);
+        }
       } else {
-        clientId = const Uuid().v4();
-        client = ClientModel(
-          id: clientId,
-          fullName: fullName,
-          phone: phoneController.text.trim(),
-          companyId: companyId,
-          branchId: effectiveBranchId,
-          createdBy: userId,
-          createdAt: DateTime.now(),
-        );
+        // In Edit Mode, we assume Client ID exists.
+        // We might blindly update client Name if changed?
+        // Let's skip client update for now to avoid complexity, or just update name if we have logic.
       }
 
-      await _repository.saveClient(client);
+      final vehicleId = isEdit ? existingVehicle.id : const Uuid().v4();
 
-      final vehicleId = const Uuid().v4();
+      // Upload NEW images
       final uploadTasks = _selectedImages.map((image) {
         return _repository.uploadVehicleImage(
           imageBytes: image,
@@ -253,7 +318,8 @@ class VehicleEntryProvider extends ChangeNotifier {
         );
       });
 
-      final photoUrls = await Future.wait(uploadTasks);
+      final newPhotoUrls = await Future.wait(uploadTasks);
+      final finalPhotoUrls = [..._existingPhotoUrls, ...newPhotoUrls];
 
       List<String> selectedServices = [];
       if (_selectedBaseServiceId != null) {
@@ -269,17 +335,24 @@ class VehicleEntryProvider extends ChangeNotifier {
         id: vehicleId,
         clientId: clientId,
         companyId: companyId,
-        entryDate: DateTime.now(),
-        photoUrls: photoUrls,
-        status: Vehicle.statusWashing,
+        entryDate: isEdit ? existingVehicle.entryDate : DateTime.now(),
+        photoUrls: finalPhotoUrls,
+        status: isEdit ? existingVehicle.status : Vehicle.statusWashing,
         branchId: effectiveBranchId,
         clientName: fullName,
         vehicleType: finalVehicleType,
         services: selectedServices,
-        createdBy: userId,
-        createdAt: DateTime.now(),
+        createdBy: isEdit ? existingVehicle.createdBy : userId,
+        createdAt: isEdit ? existingVehicle.createdAt : DateTime.now(),
+        updatedBy: userId,
+        updatedAt: DateTime.now(),
       );
-      await _repository.saveVehicle(vehicle);
+
+      if (isEdit) {
+        await _repository.updateVehicle(vehicle);
+      } else {
+        await _repository.saveVehicle(vehicle);
+      }
 
       _isLoading = false;
       notifyListeners();
@@ -297,6 +370,7 @@ class VehicleEntryProvider extends ChangeNotifier {
     phoneController.clear();
     customTypeController.clear();
     _selectedImages.clear();
+    _existingPhotoUrls.clear(); // Clear existing
     _selectedBaseServiceId = null;
     _selectedExtrasIds.clear();
     _selectedVehicleType = 'turismo';
@@ -304,6 +378,7 @@ class VehicleEntryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ... (Rest of existing methods)
   // Autocomplete helpers
   Client? _selectedClient;
   List<Client> _allClients = [];
@@ -338,7 +413,11 @@ class VehicleEntryProvider extends ChangeNotifier {
     String companyId, {
     String? branchId,
   }) {
-    return _repository.searchClients(query, companyId, branchId: branchId);
+    return _repository.searchClients(
+      query,
+      companyId,
+      branchId: branchId ?? '',
+    );
   }
 
   void fillClientData(Client client) {

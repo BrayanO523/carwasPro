@@ -113,6 +113,7 @@ class UserManagementProvider extends ChangeNotifier {
   Future<bool> createUser({
     required String companyId,
     String? operatorId,
+    List<String>? permissions,
   }) async {
     if (nameController.text.isEmpty ||
         emailController.text.isEmpty ||
@@ -129,15 +130,16 @@ class UserManagementProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Calculate Emission Point for Admin users (Auto-increment)
-      // Calculate Emission Point for Admin users (Auto-increment per Branch)
+      // Calculate Emission Point for Admin users (Auto-increment, simplified)
       String? emissionPoint;
       if (_selectedRole == 'admin') {
+        // ... existing emission point logic ...
+        // For simplicity, reusing existing logic if not modifying it heavily.
+        // Actually, I should just copy the body but I want to avoid re-writing everything if possible
+        // But the signature change requires it.
+        // Let's copy the emission point logic from the original file (lines 135-148)
         int maxEp = 0;
-
-        // Filter users by the selected branch
         final branchUsers = _users.where((u) => u.branchId == selectedBranchId);
-
         for (var user in branchUsers) {
           if (user.emissionPoint != null) {
             final ep = int.tryParse(user.emissionPoint!) ?? 0;
@@ -156,6 +158,7 @@ class UserManagementProvider extends ChangeNotifier {
         branchId: selectedBranchId,
         emissionPoint: emissionPoint,
         operatorId: operatorId,
+        permissions: permissions, // Pass Valid Permissions
       );
 
       _users.add(newUser);
@@ -181,6 +184,7 @@ class UserManagementProvider extends ChangeNotifier {
     required String companyId,
     String? emissionPoint,
     String? operatorId,
+    List<String>? permissions,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -193,6 +197,7 @@ class UserManagementProvider extends ChangeNotifier {
         branchId: branchId,
         emissionPoint: emissionPoint,
         operatorId: operatorId,
+        permissions: permissions, // Pass Valid Permissions
       );
 
       // Reload users to reflect changes

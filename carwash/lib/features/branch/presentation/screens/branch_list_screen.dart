@@ -1,3 +1,4 @@
+import 'package:carwash/core/constants/app_permissions.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/branch_provider.dart';
@@ -27,19 +28,26 @@ class _BranchListScreenState extends State<BranchListScreen> {
   @override
   Widget build(BuildContext context) {
     final branchProvider = context.watch<BranchProvider>();
+    final authProvider = context.watch<AuthProvider>();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sucursales'),
         backgroundColor: Colors.transparent,
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/branch-create'),
-        backgroundColor: const Color(
-          0xFFFBBF24,
-        ), // Amber color matching home card
-        child: const Icon(Icons.add_business_rounded, color: Colors.white),
-      ),
+      floatingActionButton:
+          authProvider.hasPermission(AppPermissions.manageBranches)
+          ? FloatingActionButton(
+              onPressed: () => context.push('/branch-create'),
+              backgroundColor: const Color(
+                0xFFFBBF24,
+              ), // Amber color matching home card
+              child: const Icon(
+                Icons.add_business_rounded,
+                color: Colors.white,
+              ),
+            )
+          : null,
       body: branchProvider.isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -90,23 +98,29 @@ class _BranchListScreenState extends State<BranchListScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: ListTile(
-                            onTap: () {
-                              final companyId = context
-                                  .read<AuthProvider>()
-                                  .currentUser
-                                  ?.companyId;
-                              if (companyId != null) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => BranchFiscalConfigScreen(
-                                      companyId: companyId,
-                                      branch: branch,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
+                            onTap:
+                                authProvider.hasPermission(
+                                  AppPermissions.manageBranches,
+                                )
+                                ? () {
+                                    final companyId = context
+                                        .read<AuthProvider>()
+                                        .currentUser
+                                        ?.companyId;
+                                    if (companyId != null) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              BranchFiscalConfigScreen(
+                                                companyId: companyId,
+                                                branch: branch,
+                                              ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                : null,
                             contentPadding: const EdgeInsets.all(16),
                             leading: CircleAvatar(
                               backgroundColor: const Color(

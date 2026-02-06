@@ -178,6 +178,70 @@ class VehicleEntryRepositoryImpl implements VehicleEntryRepository {
   }
 
   @override
+  Future<void> updateVehicle(Vehicle vehicle) async {
+    try {
+      await _firestore
+          .collection('vehiculos')
+          .doc(vehicle.id)
+          .update((vehicle as VehicleModel).toMap()); // Update full map
+
+      // Audit Log
+      await _auditRepository.logEvent(
+        AuditLog(
+          id: const Uuid().v4(),
+          action: 'UPDATE_VEHICLE',
+          collection: 'vehiculos',
+          documentId: vehicle.id,
+          userId: vehicle.updatedBy ?? 'unknown',
+          userEmail: 'unknown',
+          timestamp: DateTime.now(),
+          details: {
+            'plate': vehicle.plate,
+            'client': vehicle.clientName,
+            'status': vehicle.status,
+          },
+          companyId: vehicle.companyId,
+          branchId: vehicle.branchId,
+        ),
+      );
+    } catch (e) {
+      log('Error updating vehicle: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> deleteVehicle(String vehicleId) async {
+    try {
+      // Get doc for audit before deleting
+      final doc = await _firestore.collection('vehiculos').doc(vehicleId).get();
+      final data = doc.data();
+
+      await _firestore.collection('vehiculos').doc(vehicleId).delete();
+
+      if (data != null) {
+        await _auditRepository.logEvent(
+          AuditLog(
+            id: const Uuid().v4(),
+            action: 'DELETE_VEHICLE',
+            collection: 'vehiculos',
+            documentId: vehicleId,
+            userId: 'unknown', // Need context
+            userEmail: 'unknown',
+            timestamp: DateTime.now(),
+            details: data,
+            companyId: data['empresa_id'],
+            branchId: data['sucursal_id'],
+          ),
+        );
+      }
+    } catch (e) {
+      log('Error deleting vehicle: $e');
+      rethrow;
+    }
+  }
+
+  @override
   Future<String> uploadVehicleImage({
     required Uint8List imageBytes,
     required String companyId,

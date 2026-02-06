@@ -4,9 +4,14 @@ class UserEntity {
   final String companyId;
   final String role; // 'admin', 'employee'
   final String name;
+  final List<String> permissions;
   final String? branchId;
   final String? emissionPoint;
   final bool isFirstLogin;
+  final String? createdBy;
+  final DateTime? createdAt;
+  final String? updatedBy;
+  final DateTime? updatedAt;
 
   UserEntity({
     required this.id,
@@ -14,6 +19,7 @@ class UserEntity {
     required this.companyId,
     required this.role,
     required this.name,
+    this.permissions = const [],
     this.branchId,
     this.emissionPoint,
     this.isFirstLogin = true,
@@ -22,9 +28,4 @@ class UserEntity {
     this.updatedBy,
     this.updatedAt,
   });
-
-  final String? createdBy;
-  final DateTime? createdAt;
-  final String? updatedBy;
-  final DateTime? updatedAt;
 }

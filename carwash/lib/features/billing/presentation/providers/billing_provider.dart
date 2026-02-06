@@ -16,6 +16,7 @@ import 'package:carwash/features/billing/domain/entities/invoice_item.dart';
 import 'package:carwash/features/company/data/models/company_model.dart';
 import 'package:carwash/features/branch/data/models/branch_model.dart';
 import 'package:carwash/features/auth/domain/entities/user_entity.dart';
+import 'package:carwash/features/billing/domain/exceptions/credit_exceptions.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -48,8 +49,9 @@ class BillingProvider extends ChangeNotifier {
     // Cache check
     if (!force &&
         companyId == _currentCompanyId &&
-        branchId == _currentBranchId)
+        branchId == _currentBranchId) {
       return;
+    }
     _currentCompanyId = companyId;
     _currentBranchId = branchId;
 
@@ -380,7 +382,7 @@ class BillingProvider extends ChangeNotifier {
 
       // Calculate Totals First for Validation
       final subtotal = items.fold(0.0, (acc, item) => acc + item.total);
-      final isv15 = subtotal * 0.15;
+      final isv15 = docType == 'receipt' ? 0.0 : subtotal * 0.15;
       final total = subtotal + isv15;
 
       // Credit Validation
@@ -397,8 +399,10 @@ class BillingProvider extends ChangeNotifier {
           final newBalance = client.currentBalance + total;
           if (newBalance > client.creditLimit) {
             // For now throw, or we could require override param
-            throw Exception(
-              'Límite de crédito excedido. Balance: ${client.currentBalance} + Venta: $total = $newBalance > Límite: ${client.creditLimit}',
+            throw CreditLimitExceededException(
+              limit: client.creditLimit,
+              currentBalance: client.currentBalance,
+              saleAmount: total,
             );
           }
         }

@@ -1,23 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
-import '../../domain/entities/invoice.dart';
+import '../providers/balance_provider.dart';
 
-enum ChartViewMode { daily, weekly, monthly }
-
-class RevenueChartData {
-  final String label;
-  final double revenue;
-  final int count;
-
-  RevenueChartData(this.label, this.revenue, this.count);
-}
-
+/// Revenue Chart Widget - Uses BalanceProvider for data aggregation (MVVM Compliant)
 class RevenueChart extends StatefulWidget {
-  final List<Invoice> invoices;
-
-  const RevenueChart({super.key, required this.invoices});
+  const RevenueChart({super.key});
 
   @override
   State<RevenueChart> createState() => _RevenueChartState();
@@ -61,119 +51,6 @@ class _RevenueChartState extends State<RevenueChart> {
     );
   }
 
-  List<RevenueChartData> _getChartData() {
-    final now = DateTime.now();
-
-    switch (_viewMode) {
-      case ChartViewMode.daily:
-        final todayStart = DateTime(now.year, now.month, now.day);
-        final todayEnd = todayStart.add(const Duration(days: 1));
-
-        final todayInvoices = widget.invoices
-            .where(
-              (inv) =>
-                  inv.createdAt.isAfter(
-                    todayStart.subtract(const Duration(seconds: 1)),
-                  ) &&
-                  inv.createdAt.isBefore(todayEnd),
-            )
-            .toList();
-
-        Map<int, double> hourlyData = {};
-        Map<int, int> hourlyCounts = {};
-
-        for (var inv in todayInvoices) {
-          final hour = inv.createdAt.hour;
-          hourlyData[hour] = (hourlyData[hour] ?? 0) + inv.totalAmount;
-          hourlyCounts[hour] = (hourlyCounts[hour] ?? 0) + 1;
-        }
-
-        List<RevenueChartData> result = [];
-        // Fixed Business Hours: 7am to 9pm (to ensure line continuity)
-        for (int h = 7; h <= 21; h++) {
-          final label = h < 12 ? '${h}am' : (h == 12 ? '12pm' : '${h - 12}pm');
-
-          result.add(
-            RevenueChartData(label, hourlyData[h] ?? 0, hourlyCounts[h] ?? 0),
-          );
-        }
-        return result;
-
-      case ChartViewMode.weekly:
-        final weekday = now.weekday;
-        final weekStart = DateTime(
-          now.year,
-          now.month,
-          now.day,
-        ).subtract(Duration(days: weekday - 1));
-        final weekEnd = weekStart.add(const Duration(days: 7));
-
-        final weekInvoices = widget.invoices
-            .where(
-              (inv) =>
-                  inv.createdAt.isAfter(
-                    weekStart.subtract(const Duration(seconds: 1)),
-                  ) &&
-                  inv.createdAt.isBefore(weekEnd),
-            )
-            .toList();
-
-        Map<int, double> dailyData = {};
-        Map<int, int> dailyCounts = {};
-
-        for (var inv in weekInvoices) {
-          final day = inv.createdAt.weekday;
-          dailyData[day] = (dailyData[day] ?? 0) + inv.totalAmount;
-          dailyCounts[day] = (dailyCounts[day] ?? 0) + 1;
-        }
-
-        const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-        List<RevenueChartData> weekResult = [];
-        for (int d = 1; d <= 7; d++) {
-          weekResult.add(
-            RevenueChartData(
-              dayNames[d - 1],
-              dailyData[d] ?? 0,
-              dailyCounts[d] ?? 0,
-            ),
-          );
-        }
-        return weekResult;
-
-      case ChartViewMode.monthly:
-        final monthStart = DateTime(now.year, now.month, 1);
-        final nextMonth = DateTime(now.year, now.month + 1, 1);
-
-        final monthInvoices = widget.invoices
-            .where(
-              (inv) =>
-                  inv.createdAt.isAfter(
-                    monthStart.subtract(const Duration(seconds: 1)),
-                  ) &&
-                  inv.createdAt.isBefore(nextMonth),
-            )
-            .toList();
-
-        Map<int, double> monthlyData = {};
-        Map<int, int> monthlyCounts = {};
-
-        for (var inv in monthInvoices) {
-          final day = inv.createdAt.day;
-          monthlyData[day] = (monthlyData[day] ?? 0) + inv.totalAmount;
-          monthlyCounts[day] = (monthlyCounts[day] ?? 0) + 1;
-        }
-
-        List<RevenueChartData> monthResult = [];
-        final maxDay = now.day;
-        for (int d = 1; d <= maxDay; d++) {
-          monthResult.add(
-            RevenueChartData('$d', monthlyData[d] ?? 0, monthlyCounts[d] ?? 0),
-          );
-        }
-        return monthResult;
-    }
-  }
-
   String _getTitle() {
     final now = DateTime.now();
     switch (_viewMode) {
@@ -186,8 +63,7 @@ class _RevenueChartState extends State<RevenueChart> {
     }
   }
 
-  String _getSubtitle() {
-    final chartData = _getChartData();
+  String _getSubtitle(List<RevenueChartData> chartData) {
     final total = chartData.fold<double>(0, (sum, item) => sum + item.revenue);
     final count = chartData.fold<int>(0, (sum, item) => sum + item.count);
     return 'L. ${NumberFormat('#,##0', 'es').format(total)} • $count facturas';
@@ -195,7 +71,9 @@ class _RevenueChartState extends State<RevenueChart> {
 
   @override
   Widget build(BuildContext context) {
-    final chartData = _getChartData();
+    // Get data from Provider (MVVM: Logic in Provider, not Widget)
+    final balanceProvider = context.watch<BalanceProvider>();
+    final chartData = balanceProvider.getChartData(_viewMode);
 
     return Container(
       decoration: BoxDecoration(
@@ -213,7 +91,7 @@ class _RevenueChartState extends State<RevenueChart> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildHeader(),
+          _buildHeader(chartData),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 16, 16),
             child: SizedBox(
@@ -247,7 +125,6 @@ class _RevenueChartState extends State<RevenueChart> {
                   majorTickLines: const MajorTickLines(size: 0),
                 ),
                 series: <CartesianSeries>[
-                  // Fast Line Series
                   FastLineSeries<RevenueChartData, String>(
                     dataSource: chartData,
                     xValueMapper: (data, _) => data.label,
@@ -266,7 +143,7 @@ class _RevenueChartState extends State<RevenueChart> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(List<RevenueChartData> chartData) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 12, 8),
       child: Row(
@@ -306,7 +183,7 @@ class _RevenueChartState extends State<RevenueChart> {
                   ),
                 ),
                 Text(
-                  _getSubtitle(),
+                  _getSubtitle(chartData),
                   style: GoogleFonts.outfit(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,

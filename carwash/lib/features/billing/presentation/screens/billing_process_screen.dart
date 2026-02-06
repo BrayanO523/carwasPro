@@ -1,4 +1,5 @@
 import 'dart:developer';
+import 'package:carwash/core/constants/app_permissions.dart';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -12,13 +13,15 @@ import 'package:carwash/features/billing/presentation/providers/billing_provider
 import 'package:carwash/features/branch/domain/repositories/branch_repository.dart';
 // import 'package:cloud_firestore/cloud_firestore.dart'; // Removed: Moved to Provider
 import 'package:carwash/features/company/domain/entities/company.dart';
+import 'package:carwash/features/billing/domain/entities/invoice_item.dart';
+import 'package:carwash/features/billing/domain/exceptions/credit_exceptions.dart';
+// import 'package:carwash/core/constants/formatters.dart'; // Does not exist
 import 'package:carwash/features/company/domain/repositories/company_repository.dart';
 import 'package:carwash/core/utils/pdf_service.dart';
 import 'package:carwash/core/utils/number_to_words.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:carwash/features/branch/domain/entities/branch.dart';
-import 'package:carwash/features/billing/domain/entities/invoice_item.dart';
 
 class BillingProcessScreen extends StatefulWidget {
   final Vehicle vehicle;
@@ -179,7 +182,8 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
   double get _taxableAmount15 => _subtotal;
   double get _taxableAmount18 => 0.0;
 
-  double get _isv15 => _taxableAmount15 * 0.15;
+  double get _isv15 =>
+      _selectedDocType == 'receipt' ? 0.0 : _taxableAmount15 * 0.15;
   double get _isv18 => _taxableAmount18 * 0.18;
 
   double get _total => _subtotal - _discountTotal + _isv15 + _isv18;
@@ -190,22 +194,7 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
     // unused variable authProvider removed
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Emitir Factura'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Configuración de Facturación (Próximamente)'),
-                ),
-              );
-            },
-            tooltip: 'Configurar Datos de Facturación',
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Emitir Factura')),
       body: _isLoadingClient || _isLoadingItems
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -473,33 +462,35 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
         builder: (context, setState) {
           return AlertDialog(
             title: const Text('Habilitar Crédito Rápido'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Ingrese los datos para habilitar el crédito a este cliente inmediatamente.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: limitController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Límite de Crédito (L)',
-                    border: OutlineInputBorder(),
-                    prefixText: 'L. ',
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Ingrese los datos para habilitar el crédito a este cliente inmediatamente.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: daysController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Días de Plazo',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: limitController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Límite de Crédito (L)',
+                      border: OutlineInputBorder(),
+                      prefixText: 'L. ',
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: daysController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Días de Plazo',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -1241,6 +1232,11 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
         throw Exception("Datos incompletos");
       }
 
+      final authProvider = context.read<AuthProvider>();
+      if (!authProvider.hasPermission(AppPermissions.emitInvoice)) {
+        throw Exception("No tienes permiso para emitir facturas");
+      }
+
       setState(() => _isProcessing = true);
 
       // Save RTN and Address to client if they were entered and are different
@@ -1324,9 +1320,20 @@ class _BillingProcessScreenState extends State<BillingProcessScreen> {
       context.go('/home');
     } catch (e) {
       if (context.mounted) {
-        // Show clearer error message
-        String msg = e.toString().replaceAll('Exception: ', '');
-        _showFiscalError('Error', msg);
+        if (e is CreditLimitExceededException) {
+          final exceeded = e.exceededAmount;
+          _showFiscalError(
+            'LÍMITE SUPERADO',
+            'CRÉDITO MÁXIMO: L. ${e.limit.toStringAsFixed(2)}\n\n'
+                'BALANCE: L. ${e.currentBalance.toStringAsFixed(2)}\n\n'
+                'EXCEDENTE: L. ${exceeded.toStringAsFixed(2)}\n'
+                '(Venta: L. ${e.saleAmount.toStringAsFixed(2)} + Balance - Límite)',
+          );
+        } else {
+          // Show clearer generic error message
+          String msg = e.toString().replaceAll('Exception: ', '');
+          _showFiscalError('Error', msg);
+        }
         setState(() => _isProcessing = false);
       }
     }

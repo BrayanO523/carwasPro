@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:carwash/core/constants/app_permissions.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -145,7 +146,17 @@ class _BillingVehicleCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () {
-          context.push('/billing-process', extra: vehicle);
+          if (context.read<AuthProvider>().hasPermission(
+            AppPermissions.emitInvoice,
+          )) {
+            context.push('/billing-process', extra: vehicle);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No tienes permiso para emitir facturas'),
+              ),
+            );
+          }
         },
         borderRadius: BorderRadius.circular(16),
         child: Padding(

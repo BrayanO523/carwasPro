@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/wash_type_provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:carwash/core/constants/app_permissions.dart';
 import 'package:carwash/features/auth/presentation/providers/auth_provider.dart';
 
 import '../../../products/presentation/providers/product_provider.dart';
@@ -63,17 +64,22 @@ class _WashTypeListScreenState extends State<WashTypeListScreen>
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (_tabController.index == 0) {
-            context.push('/wash-types/add');
-          } else {
-            context.push('/products/add');
-          }
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo Item'),
-      ),
+      floatingActionButton:
+          context.read<AuthProvider>().hasPermission(
+            AppPermissions.createInventory,
+          )
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                if (_tabController.index == 0) {
+                  context.push('/wash-types/add');
+                } else {
+                  context.push('/products/add');
+                }
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo Item'),
+            )
+          : null,
       body: TabBarView(
         controller: _tabController,
         children: [_ServicesList(), _ProductsList()],
@@ -306,8 +312,15 @@ class _ServicesListState extends State<_ServicesList> {
                             item.isActive ? Icons.check_circle : Icons.cancel,
                             color: item.isActive ? Colors.green : Colors.grey,
                           ),
-                          onTap: () =>
-                              context.push('/wash-types/edit', extra: item),
+                          onTap:
+                              context.read<AuthProvider>().hasPermission(
+                                AppPermissions.editInventory,
+                              )
+                              ? () => context.push(
+                                  '/wash-types/edit',
+                                  extra: item,
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -442,8 +455,13 @@ class _ProductsListState extends State<_ProductsList> {
                             item.isActive ? Icons.check_circle : Icons.cancel,
                             color: item.isActive ? Colors.green : Colors.grey,
                           ),
-                          onTap: () =>
-                              context.push('/products/edit', extra: item),
+                          onTap:
+                              context.read<AuthProvider>().hasPermission(
+                                AppPermissions.editInventory,
+                              )
+                              ? () =>
+                                    context.push('/products/edit', extra: item)
+                              : null,
                         ),
                       );
                     },
