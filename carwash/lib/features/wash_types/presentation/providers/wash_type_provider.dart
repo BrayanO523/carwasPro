@@ -19,6 +19,8 @@ class WashTypeProvider extends ChangeNotifier {
 
   // Cache Logic
   bool _isLoaded = false;
+  String? _lastCompanyId;
+  String? _lastBranchId; // Store last used branch filter
 
   Future<void> loadWashTypes(
     String companyId, {
@@ -26,6 +28,10 @@ class WashTypeProvider extends ChangeNotifier {
     bool force = false,
   }) async {
     if (_isLoaded && !force) return;
+
+    // Store filter state for later reloads
+    _lastCompanyId = companyId;
+    _lastBranchId = branchId;
 
     _isLoading = true;
     _errorMessage = null;
@@ -139,7 +145,8 @@ class WashTypeProvider extends ChangeNotifier {
 
       await _repository.saveWashType(washType);
 
-      await loadWashTypes(companyId, force: true);
+      // Reload with the same branch filter that was used before
+      await loadWashTypes(companyId, branchId: _lastBranchId, force: true);
       return true;
     } catch (e) {
       _errorMessage = e.toString();
